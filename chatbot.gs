@@ -5,7 +5,7 @@
  */
 
 const SETTINGS = {
-  maxItemsPerSource: 12,        
+  maxItemsPerSource: 11,        
   maxSendPerCategory: 3,        
   lookbackDays: 30,             
   maxPerSourceInDigest: 2,      
