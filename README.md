@@ -7,41 +7,152 @@ Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/
 ![Google Chat Card UI Example](https://img.shields.io/badge/Google_Chat-Cards_V2-blue?logo=googlechat)
 ![Language](<https://img.shields.io/badge/Language-JavaScript_(GAS)-yellow>)
 
-## 기획 배경 (Why?)
+---
 
-- 고객 선제적 서비스(Before Service): 최신 기술 트렌드와 라이브러리 업데이트를 상시 모니터링하여, 고객의 요구가 있기 전 선제적으로 기술적 제안과 최적의 솔루션을 제공하기 위함입니다.
-- 매일 쏟아지는 기술 블로그와 유튜브 영상 속에서 **실무에 진짜 필요한 정보만 필터링**할 필요성 대두.
-- 전사적으로 적극 활용 중인 필수 스택(`Cursor`, `Gemini`, `Swiper`, `GSAP` 등), 즉 사내 주요 도구의 업데이트 소식을 팀원 모두가 빠르게 파악하고 프로젝트 품질과 생산성을 유지합니다.
-- 공유 문화 조성: 나른한 월요일 오후 시간대를 타겟팅하여, 팀 내 기술 인사이트 공유를 활성화하고 업무 리프레시를 돕습니다.
+## 변경 이력 (Changelog)
 
-## 핵심 기능 (Key Features)
+### v2.0 (2026-03-13)
 
-### 1. VVIP 카테고리 고정 (우선순위 노출)
+-   **Cursor 이중 피드 수집:** 공식 RSS(`cursor.com/rss.xml`)가 간헐적으로 비활성화되는 문제를 보완하기 위해 비공식 미러 피드를 추가로 수집. 제목 기반 중복 제거 적용
+-   **Cursor 우선 노출:** Cursor Blog/Changelog에 +40 보너스 점수 부여
+-   **CORE_AI 소스 다양성 개선:** 소스당 최대 노출 2개 → 1개로 축소, 최대 전송 수 3개 → 5개로 확대
+-   **수집 기간 단축:** 일반 글 lookback 30일 → 7일 (라이브러리는 30일 유지)
+-   **한국어 자동 번역 범위 확대:** 릴리즈 노트에만 적용되던 번역을 모든 RSS 글로 확대
+-   **라이브러리 [릴리즈 보기] 버튼:** 신규 릴리즈 없는 주에도 각 라이브러리별 릴리즈 페이지 바로가기 버튼 제공
+-   **유튜브 채널 정비:** 코딩애플·드림코딩·1분코딩 제거 / 개발동생·토스·당근테크 추가 (총 8개)
+-   **유튜브 MUST 키워드 보강:** `바이브코딩`, `클로드코드`, `claude code`, `replit` 추가
+
+---
+
+## 기획 배경
+
+-   **고객 선제적 서비스(Before Service):** 최신 기술 트렌드와 라이브러리 업데이트를 상시 모니터링하여, 고객의 요구가 있기 전 선제적으로 기술적 제안과 최적의 솔루션을 제공하기 위함입니다.
+-   매일 쏟아지는 기술 블로그와 유튜브 영상 속에서 **실무에 진짜 필요한 정보만 필터링**할 필요성 대두.
+-   전사적으로 적극 활용 중인 필수 스택(`Cursor`, `Gemini`, `Swiper`, `GSAP` 등)의 업데이트 소식을 팀원 모두가 빠르게 파악하고 프로젝트 품질과 생산성을 유지합니다.
+-   **공유 문화 조성:** 나른한 월요일 오후 시간대를 타겟팅하여, 팀 내 기술 인사이트 공유를 활성화하고 업무 리프레시를 돕습니다.
+
+---
+
+## 핵심 기능
+
+### 1. VVIP 카테고리 고정 - 우선순위 노출
 
 회사 필수 도입 툴 및 라이브러리의 릴리즈 소식은 다른 뉴스 알고리즘에 밀리지 않도록 **최상단 VVIP 섹션에 강제 고정 배치**합니다.
 
-### 2. 3줄 요약 & 영문 자동 번역 (AI Translation)
+### 2. Cursor 소스 우선 노출 (+40 보너스 점수)
 
-영어로 작성된 GitHub 릴리즈 노트나 해외 공식 블로그 글에서 핵심 내용(버그 픽스, 신기능 등)만 3줄로 추출합니다. 추출된 영문 요약본은 **Google Language API를 통해 한국어로 자동 번역**되어 챗 카드에 출력됩니다.
+전사 도입 툴인 Cursor의 블로그와 Changelog를 타 소스 대비 **+40 보너스 점수**로 항상 우선 노출합니다.
+Cursor 공식 블로그 RSS가 간헐적으로 불안정한 점을 보완하기 위해, **공식 피드와 비공식 미러 피드를 이중으로 수집**하고 제목 기반 중복 제거를 적용합니다.
 
-### 3. 스마트 노이즈 캔슬링 (정밀 예외 처리)
+### 3. 소스 다양성 보장
 
-- 직무와 무관한 뉴스(정치, 주총, 행사 등)를 네거티브 키워드로 차단합니다.
-- Google Chat API 400 에러를 유발하는 빈 링크, 유튜브 쇼츠(Shorts), 라이브 스트리밍 영상을 원천 차단하여 시스템 안정성을 확보했습니다.
+특정 출처가 섹션을 독점하지 않도록 소스별 최대 노출 개수를 제한합니다.
 
-### 4. 소스 독점 방지 알고리즘 (Quota System)
+-   **CORE_AI 섹션:** 소스당 최대 1개, 최대 5개 전송 (여러 소스에서 골고루 노출)
+-   **일반 섹션:** 소스당 최대 2개 제한
 
-특정 유튜브 채널이나 기업 블로그가 뉴스레터를 도배하지 않도록, 한 출처당 최대 노출 개수를 2개로 제한하여 정보의 다양성을 유지합니다.
+### 4. 7일 기준 최신 글만 수집
 
-### 5. 철저한 보안 관리
+지난 **7일 이내** 발행된 글만 수집하여 항상 그 주의 최신 소식만 전달합니다.
+(라이브러리 릴리즈 감지는 버전 누락 방지를 위해 30일 기준 유지)
 
-Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties(스크립트 속성)` 환경 변수를 사용하여 외부 노출로부터 안전하게 보호합니다.
+### 5. 3줄 요약 & 한국어 자동 번역
+
+영문으로 작성된 릴리즈 노트나 해외 블로그 글의 핵심 내용(버그 픽스, 신기능 등)을 3줄로 추출하고, **Google LanguageApp을 통해 한국어로 자동 번역**합니다. 한국어 원문은 번역을 건너뜁니다.
+
+### 6. 스마트 노이즈 캔슬링
+
+-   직무와 무관한 뉴스(정치, 주총, 채용 등)를 네거티브 키워드로 차단합니다.
+-   기업 홍보성 케이스 스터디, 유튜브 Shorts, 라이브 스트리밍을 원천 차단합니다.
+-   여러 피드에서 동일 제목의 글이 수집될 경우 자동 중복 제거합니다.
+
+### 7. 라이브러리 릴리즈 감지 & 버전 캐싱
+
+Script Properties에 각 라이브러리의 최신 버전을 캐싱하여, **신규 릴리즈가 있을 때만 알림**합니다.
+신규 릴리즈가 없는 주에는 현재 안정 버전과 함께 **[릴리즈 보기] 버튼**을 제공합니다.
+
+### 8. 유튜브 캐시 폴백
+
+GAS 서버 IP 차단으로 유튜브 피드 수집에 실패하더라도, 이전에 성공한 데이터를 **CacheService에 6일간 보관**하여 가능한 한 안정적으로 영상을 제공합니다.
+
+### 9. 철저한 보안 관리
+
+Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties` 환경 변수를 사용하여 외부 노출을 차단합니다.
+
+---
+
+## 수집 소스 (Sources)
+
+### 🤖 AI 필수 업데이트
+
+| 소스                                       | 종류 |
+| ------------------------------------------ | ---- |
+| Cursor Blog (공식 + 비공식 미러 이중 수집) | RSS  |
+| Cursor Changelog (GitHub Releases)         | RSS  |
+| OpenAI Blog                                | RSS  |
+| Google DeepMind                            | RSS  |
+| Google for Developers                      | RSS  |
+| HuggingFace Blog                           | RSS  |
+
+### 📦 필수 라이브러리
+
+| 소스       | 릴리즈 페이지                           |
+| ---------- | --------------------------------------- |
+| Swiper     | github.com/nolimits4web/swiper/releases |
+| GSAP       | gsap.com/blog                           |
+| jQuery     | github.com/jquery/jquery/releases       |
+| Sass(SCSS) | github.com/sass/dart-sass/releases      |
+
+### 🏢 IT 업계 / 실무
+
+| 소스              | 종류 |
+| ----------------- | ---- |
+| 무신사 기술블로그 | RSS  |
+| 토스 테크         | RSS  |
+| 당근 테크         | RSS  |
+| GeekNews          | RSS  |
+| CSS-Tricks        | RSS  |
+| web.dev           | RSS  |
+| Smashing Magazine | RSS  |
+| MDN Blog          | RSS  |
+
+### 📺 유튜브 (8개 채널)
+
+| 채널            | 분류                 |
+| --------------- | -------------------- |
+| 개발동생        | AI 도구 / 프론트엔드 |
+| 조코딩          | AI 도구 / 웹개발     |
+| 윤자동          | 업무 자동화          |
+| 노마드코더      | 웹개발               |
+| 우아한테크      | 테크                 |
+| 토스            | 테크                 |
+| 당근테크        | 테크                 |
+| 시민개발자 구씨 | 노코드 / AI          |
+
+> ⚠️ 유튜브는 GAS 서버 IP 차단 이슈로 일부 채널이 간헐적으로 수집될 수 있습니다. 수집 성공 시 6일간 캐시에 보관되어 폴백으로 활용됩니다.
+
+---
+
+## 카테고리 구조
+
+| 섹션                           | 설명                                          | 우선순위           |
+| ------------------------------ | --------------------------------------------- | ------------------ |
+| 🤖 전사 도입 AI 필수 업데이트  | Cursor, Gemini 등 핵심 AI 툴 최신 소식        | VVIP (최상단 고정) |
+| 📦 필수 라이브러리 릴리즈      | Swiper, GSAP, jQuery, SCSS 공식 업데이트      | VVIP (최상단 고정) |
+| 🌟 금주의 팝콘 픽              | 알고리즘 점수 기반 가장 추천하는 아티클 Top 3 | 상단               |
+| ✨ UI/UX 퍼블리싱 & 인터랙션   | CSS, 접근성, 인터랙션 관련 실무 팁            | 중간               |
+| 🏢 IT 업계 실무 & 자동화 꿀팁  | 업무 자동화, 프론트엔드 최적화 관련 소식      | 중간               |
+| 📺 주말에 몰아보는 코딩 유튜브 | 엄선된 실무 유튜브 영상                       | 하단               |
+
+---
 
 ## 사용 기술 (Tech Stack)
 
-- **Language:** JavaScript (Google Apps Script)
-- **API/Integration:** Google Chat Webhook API (Cards V2 JSON format), Google LanguageApp
-- **Data Processing:** XML / RSS / Atom Feed Parsing, Regex (정규표현식 데이터 정제)
+-   **Language:** JavaScript (Google Apps Script)
+-   **API/Integration:** Google Chat Webhook API (Cards V2), Google LanguageApp, CacheService, PropertiesService
+-   **Data Processing:** XML / RSS / Atom Feed Parsing, UrlFetchApp.fetchAll (병렬 수집)
+
+---
 
 ## 설치 및 세팅 방법 (Installation)
 
@@ -49,24 +160,22 @@ Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties(스크립트
 2. 본 저장소의 `chatbot.gs` 코드를 복사하여 에디터에 붙여넣습니다.
 3. 알림을 받을 Google Chat 스페이스에서 **[웹후크 관리]**를 통해 URL을 발급받습니다.
 4. GAS 에디터 좌측 톱니바퀴(프로젝트 설정) > **[스크립트 속성]**에 다음을 추가합니다.
-    - **속성:** `WEBHOOK_URL`
-    - **값:** `발급받은 웹후크 주소`
-5. 좌측 시계 아이콘(트리거) 메뉴에서 `mainDigest` 함수가 **매주 월요일 오후 1시 ~ 2시** 사이에 실행되도록 [시간 주도형] 트리거를 설정합니다.
+    - **속성:** `WEBHOOK_URL` / **값:** 발급받은 웹후크 주소
+5. **최초 1회** `seedLibVersionCache()` 함수를 수동 실행하여 현재 라이브러리 버전을 캐시에 저장합니다.
+    > ⚠️ 이 과정을 생략하면 첫 주에 모든 라이브러리가 신규 릴리즈로 오탐됩니다.
+6. 좌측 시계 아이콘(트리거) 메뉴에서 `mainDigest` 함수가 **매주 월요일 오후 1시 ~ 2시** 사이에 실행되도록 [시간 주도형] 트리거를 설정합니다.
 
-## 구조 및 카테고리
+### 디버그 & 유지보수 함수
 
-- **🤖 전사 도입 AI 필수 업데이트:** Cursor, Gemini 등 핵심 AI 툴 최신 소식 (VVIP)
-- **📦 필수 라이브러리 릴리즈:** Swiper, GSAP, jQuery, SCSS 공식 업데이트 (VVIP)
-- **🌟 금주의 팝콘 픽:** 알고리즘 점수 기반 가장 추천하는 아티클 Top 3
-- **✨ UI/UX 퍼블리싱 & 인터랙션:** Figma, CSS, 접근성 관련 실무 팁
-- **🏢 IT 업계 실무 & 자동화 꿀팁:** 업무 자동화(n8n, Make), 프론트엔드 최적화
-- **📺 주말에 몰아보는 코딩 유튜브:** 노마드코더, 조코딩, 윤자동 등 엄선된 실무 영상
+| 함수                     | 설명                                          |
+| ------------------------ | --------------------------------------------- |
+| `debugDigest()`          | 수집 현황 및 유튜브 필터링 진단 로그 출력     |
+| `seedLibVersionCache()`  | 현재 라이브러리 버전을 캐시에 저장 (최초 1회) |
+| `resetLibVersionCache()` | 라이브러리 버전 캐시 초기화                   |
 
 ---
 
 ## 기여하기 (Contributing)
-
-### Fork를 통한 협업 방법
 
 팀원 여러분이 새로운 RSS 피드 추가, 키워드 수정, 기능 개선 등 다양한 아이디어를 직접 반영할 수 있도록 Fork & PR 방식으로 협업합니다.
 
@@ -86,10 +195,8 @@ cd popcorn-tech-digest
 # 원본 저장소를 upstream으로 추가
 git remote add upstream https://github.com/OWNER_GITHUB_USERNAME/popcorn-tech-digest.git
 
-# remote 저장소 확인
+# remote 저장소 확인 (origin → 내 Fork, upstream → 원본)
 git remote -v
-# origin   → 본인의 Fork 저장소
-# upstream → 원본 저장소 (이 레포)
 ```
 
 #### 3. 브랜치 생성 및 작업
@@ -97,9 +204,6 @@ git remote -v
 ```bash
 # main 브랜치에서 새 브랜치 생성 (본인 이름 사용)
 git checkout -b feature/YOUR_NAME
-
-# 예시
-git checkout -b feature/gildong
 ```
 
 > 브랜치명은 `feature/이름` 형식으로 통일해 주세요.
@@ -107,13 +211,7 @@ git checkout -b feature/gildong
 #### 4. 변경사항 Commit
 
 ```bash
-# 변경사항 확인
-git status
-
-# 변경사항 추가
 git add .
-
-# Commit 작성 (아래 컨벤션 참고)
 git commit -m "feat: 노마드코더 RSS 피드 추가"
 ```
 
@@ -125,49 +223,35 @@ git commit -m "feat: 노마드코더 RSS 피드 추가"
 | `fix`      | 버그 수정                              |
 | `refactor` | 코드 리팩토링                          |
 | `docs`     | README 등 문서 수정                    |
-| `chore`    | 기타 잡다한 수정                       |
+| `chore`    | 기타 수정                              |
 
-#### 5. Upstream 동기화 (최신 상태 유지)
-
-PR을 보내기 전, 원본 저장소의 최신 변경사항을 반드시 반영해 주세요.
+#### 5. Upstream 동기화 후 Push
 
 ```bash
-# upstream의 최신 변경사항 가져오기
+# PR 전 원본 저장소 최신화 필수
 git fetch upstream
-
-# 현재 브랜치에 upstream/main 병합
 git merge upstream/main
 
-# 충돌(Conflict)이 발생했다면 해결 후 다시 commit
-```
-
-#### 6. Fork 저장소에 Push
-
-```bash
-# 본인의 Fork 저장소에 Push
+# 본인 Fork에 Push
 git push origin feature/YOUR_NAME
 ```
 
-#### 7. Pull Request 생성
+#### 6. Pull Request 생성
 
-1. GitHub에서 본인의 Fork 저장소로 이동합니다.
-2. 상단에 표시되는 **"Compare & pull request"** 버튼을 클릭합니다.
-3. PR 제목과 설명을 아래 형식에 맞게 작성합니다.
-4. **"Create Pull Request"** 버튼을 클릭하여 제출합니다.
+GitHub에서 Fork 저장소로 이동 후 **"Compare & pull request"** 버튼을 클릭합니다.
 
 **PR 작성 예시**
 
 ```
-제목: feat: 디자인 관련 RSS 피드 3개 추가
+제목: feat: 토스/당근테크 유튜브 채널 추가
 
 본문:
 ## 변경 내용
-- Smashing Magazine RSS 피드 추가
-- CSS-Tricks RSS 피드 추가
-- 네거티브 키워드에 '채용' 추가
+- 토스 유튜브 채널 추가 (UCeg5g-vWgtgzQ0cYNV2Cyow)
+- 당근테크 유튜브 채널 추가 (UC8tsBsQBuF7QybxgLmStihA)
 
 ## 변경 이유
-UI/UX 카테고리 콘텐츠 다양성 강화를 위해 추가했습니다.
+유튜브 소스 다양성 강화
 ```
 
 > PR을 보내주시면 검토 후 머지하겠습니다. 언제든지 아이디어와 개선사항을 공유해 주세요! 🍿
