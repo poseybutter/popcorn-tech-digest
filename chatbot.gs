@@ -106,8 +106,10 @@ var PUBLISHING_BLOCK_PATTERNS = [
   /design principle|design pattern|design system/i,
   /april.?fool|fools/i,
   /\b(ux research|user research|usability|persona|user journey|wireframe)\b/i,
-  // 실험적/실무 활용도 낮은 CSS (후각 API 등 비표준 실험)
-  /olfactive|haptic|smell|taste.*css|css.*smell/i
+  // 실험적/실무 활용도 낮은 CSS
+  /olfactive|haptic|smell|taste.*css|css.*smell/i,
+  // 게임/3D 실험 글
+  /doom|quake|minecraft|\b3d\b.*css|css.*\b3d\b|rendering.*game|game.*rendering/i
 ];
 
 var GENERAL_RELEVANCE_KEYWORDS = [
@@ -151,6 +153,9 @@ var SOURCES = [
   { name: "web.dev",             url: "https://web.dev/feed.xml",                         icon: "https://web.dev/favicon.ico",                   kind: "rss" },
   { name: "Smashing Magazine",   url: "https://www.smashingmagazine.com/feed/",           icon: "https://www.smashingmagazine.com/favicon.ico",   kind: "rss" },
   { name: "MDN Blog",            url: "https://developer.mozilla.org/en-US/blog/rss.xml", icon: "https://developer.mozilla.org/favicon.ico",     kind: "rss" },
+  { name: "CSS Weekly",          url: "https://css-weekly.com/feed/",                     icon: "https://css-weekly.com/favicon.ico",             kind: "rss" },
+  { name: "Frontend Focus",      url: "https://frontendfoc.us/rss",                       icon: "https://frontendfoc.us/favicon.ico",             kind: "rss" },
+  { name: "NAVER D2",            url: "https://d2.naver.com/d2.atom",                     icon: "https://d2.naver.com/favicon.ico",               kind: "rss" },
 
   { name: "Sass(SCSS) 공식",     url: "https://sass-lang.com/feed.xml",                   icon: "https://sass-lang.com/favicon.ico",              kind: "library", releasePageUrl: "https://github.com/sass/dart-sass/releases" },
   { name: "jQuery Releases",     url: "https://github.com/jquery/jquery/releases.atom",   icon: "https://jquery.com/favicon.ico",                 kind: "library", releasePageUrl: "https://github.com/jquery/jquery/releases" },
@@ -395,9 +400,23 @@ function collectItems_() {
 
         // 퍼블 소스 전용 차단 패턴 (디자이너용 글, 만우절 글 등)
         var isPublishingSource = PUBLISHING_SOURCES.indexOf(source.name) !== -1 ||
-                                 source.name === "Smashing Magazine";
+                                 source.name === "Smashing Magazine" ||
+                                 source.name === "CSS Weekly" ||
+                                 source.name === "Frontend Focus";
         if (isPublishingSource) {
           if (PUBLISHING_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
+        }
+
+        // CSS Weekly / Frontend Focus: CSS 무관 글 차단 (소스 유출, 뉴스 등)
+        var isCssNewsletter = source.name === "CSS Weekly" || source.name === "Frontend Focus";
+        if (isCssNewsletter) {
+          var cssText = (cleanTitle + " " + (entry.summary || "")).toLowerCase();
+          var hasCssKeyword = ["css", "scss", "sass", "html", "animation", "layout",
+            "grid", "flexbox", "selector", "property", "variable", "transition",
+            "scroll", "typography", "web platform", "browser"].some(function(k) {
+            return cssText.indexOf(k) !== -1;
+          });
+          if (!hasCssKeyword) continue;
         }
 
         if (SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 ||
@@ -544,6 +563,10 @@ function scoreItem_(item, source, now) {
   if (source.kind === "youtube") score += 10;
 
   if (PUBLISHING_SOURCES.indexOf(source.name) !== -1) score += 20;
+
+  // CSS Weekly, Frontend Focus는 퍼블팀 특화 소스 추가 보너스
+  var cssSpecialSources = ["CSS Weekly", "Frontend Focus"];
+  if (cssSpecialSources.indexOf(source.name) !== -1) score += 10;
 
   var cursorSources = ["Cursor Blog", "Cursor Changelog"];
   if (cursorSources.indexOf(source.name) !== -1) score += 40;
