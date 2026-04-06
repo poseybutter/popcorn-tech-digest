@@ -36,15 +36,11 @@ var SETTINGS = {
     "shorts", "일상", "여행", "개그", "예능", "스트리밍 중", "라이브",
     "솔라피", "광고", "협찬", "후원", "홍보", "이벤트", "무료특강",
     "지금 신청", "선착순", "할인", "프로모션", "공구", "체험단",
-    "부트캠프", "사전설명회", "tmux"
+    "부트캠프", "사전설명회", "tmux",
+    "자영업", "마케팅", "병의원", "crm", "채용합니다", "취업"
   ],
 
-  youtubeTrustedChannels: [
-    "윤자동 (업무자동화)", "시민개발자 구씨", "노마드코더", "조코딩", "개발동생",
-    "우아한테크", "토스", "당근테크"
-  ],
-
-  // ← 변경: Cursor Blog는 일반 번역, Cursor Changelog만 summarizeRelease_ 사용
+  // Cursor Blog는 일반 번역, Cursor Changelog만 summarizeRelease_ 사용
   cursorChangelogSources: ["Cursor Changelog"],
   cursorBlogSources: ["Cursor Blog"],
 
@@ -60,7 +56,7 @@ var SETTINGS = {
 var CORE_AI_ALLOW_KEYWORDS = [
   "cursor", "composer",
   "gemini", "google ai studio", "notebooklm", "vertex ai",
-  "chatgpt", "claude", "gpt-4", "gpt-5", "gpt-4o",
+  "chatgpt", "claude", "gpt-4", "gpt-5", "gpt-4o", "codex",
   "claude code", "vibe coding", "ai 코딩", "코딩 에이전트",
   "mcp", "copilot",
   "ai agent", "ai 에이전트", "llm api", "프롬프트 엔지니어링"
@@ -80,7 +76,11 @@ var CORE_AI_BLOCK_PATTERNS = [
   /\b(save the date|google i\/o|cloud next|build hour|conference|summit|event)\b/i,
   /\b(india|vegas|amsterdam|london|new york)\b/i,
   /\b(dataset|benchmark|leaderboard|paper|arxiv|fine.?tun|checkpoint|weights|inference|training|diffusion|llama|mistral|falcon|phi-|qwen|deepseek)\b/i,
-  /^(liberate|unleash|introducing|announcing|welcoming)\b/i
+  /^(liberate|unleash|introducing|announcing|welcoming)\b/i,
+  // 금융/기업 서비스 홍보
+  /\b(bank|insurance|financial|account manager|enterprise customer|every customer)\b/i,
+  // 철학적 방향성 에세이 (실무 무관)
+  /accelerating.*phase|next phase of ai|the future of|vision for|our approach to/i
 ];
 
 var DOMESTIC_BLOG_BLOCK_PATTERNS = [
@@ -92,10 +92,22 @@ var DOMESTIC_BLOG_BLOCK_PATTERNS = [
   /머신러닝|딥러닝|파인튜닝|모델 학습|데이터셋|레이블링/,
   /ios 앱|안드로이드 앱|flutter|앱스토어/i,
   /\bswift\b|\bkotlin\b/i,
-  /ai를 쓰는 회사|ai를 만드는 회사|조직 문화|채용 전략|리더십/,
+  /ai를 쓰는 회사|ai를 만드는 회사|조직 문화|채용 전략|리더십|직무 통합|조직 개편|직무를|직군/,
+  /\b(rust|golang|java|c\+\+|python)\b.*(파서|컴파일|런타임|바이너리)/i,
+  /hwp|hwpx|파서|ram 요구|ubuntu.*windows|windows.*ubuntu/i,
+  /petzold|gui 전략|일관된.*전략|역사적.*분석/i,
   /show gn.*?(서버|백엔드|cli 도구|api|sdk|라이브러리 만들|봇 만들)/i,
   /saas|과금 모델|구독 모델|비즈니스 모델|go.?to.?market/i,
   /암흑의 숲|인지적|철학적|사유|에세이/
+];
+
+// 퍼블 소스 전용 차단 패턴 (CSS-Tricks, web.dev 등에서 디자이너용 글 걸러내기)
+var PUBLISHING_BLOCK_PATTERNS = [
+  /design principle|design pattern|design system/i,
+  /april.?fool|fools/i,
+  /\b(ux research|user research|usability|persona|user journey|wireframe)\b/i,
+  // 실험적/실무 활용도 낮은 CSS (후각 API 등 비표준 실험)
+  /olfactive|haptic|smell|taste.*css|css.*smell/i
 ];
 
 var GENERAL_RELEVANCE_KEYWORDS = [
@@ -109,7 +121,8 @@ var DOMESTIC_SOURCES = [
   "GeekNews", "무신사 기술블로그", "29CM 기술블로그", "토스 테크", "당근 테크"
 ];
 
-var PUBLISHING_SOURCES = ["CSS-Tricks", "web.dev", "Smashing Magazine", "MDN Blog"];
+// Smashing Magazine 제외 — 키워드 필터링으로 넘겨서 CSS 관련 글만 통과
+var PUBLISHING_SOURCES = ["CSS-Tricks", "web.dev", "MDN Blog"];
 
 var SOURCES = [
   { name: "OpenAI Blog",           url: "https://openai.com/news/rss.xml",                                           icon: "https://openai.com/favicon.ico",              kind: "rss_ai"  },
@@ -120,7 +133,6 @@ var SOURCES = [
   { name: "Cursor Blog",           url: "https://any-feeds.com/api/feeds/custom/cmkoaiogm0000lf04qmtirq2g/rss.xml", icon: "https://cursor.sh/favicon.ico",               kind: "rss_ai"  },
   { name: "Cursor Blog",           url: "https://cursor.com/rss.xml",                                                icon: "https://cursor.sh/favicon.ico",               kind: "rss_ai"  },
 
-  { name: "윤자동 (업무자동화)", url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYg51KBo-UcA4QILcYl5LEw", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
   { name: "시민개발자 구씨",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCDLlMjELbrJdETmSiAB68AA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
   { name: "노마드코더",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCUpJs89fSBXNolQGOYKn0YQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
   { name: "조코딩",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYaDkwVaOhuoe_LuFr3lWkA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
@@ -147,19 +159,27 @@ var SOURCES = [
 ];
 
 var CATEGORIES = [
-  { key: "CORE_AI",     label: "🤖 전사 도입 AI 필수 업데이트 (Cursor/Gemini)", keywords: [] },
-  { key: "LIB_UPDATES", label: "📦 필수 라이브러리 릴리즈",                      keywords: [] },
-  { key: "TOP_PICKS",   label: "🌟 금주의 팝콘 픽 (기타 강추)",                   keywords: [] },
+  { key: "CORE_AI",     label: "🤖 전사 도입 AI 필수 업데이트 (Cursor · Gemini · ChatGPT)", keywords: [] },
+  { key: "LIB_UPDATES", label: "📦 필수 라이브러리 릴리즈",                                  keywords: [] },
+  { key: "TOP_PICKS",   label: "🌟 금주의 팝콘 픽 (기타 강추)",                               keywords: [] },
   {
     key: "PUBLISHING",
     label: "✨ UI/UX 퍼블리싱 & 인터랙션",
     keywords: [
-      "scss", "sass", "css", "html", "인터랙션", "마크업", "figma", "피그마",
-      "접근성", "a11y", "애니메이션", "반응형", "웹 표준",
-      "selector", "selects", "popover", "dialog", "grid", "flexbox", "flex",
-      "z-index", "animation", "transition", "scroll", "web standard",
-      "border", "layout", "typography", "color", "variable", "custom property",
-      "tailwind", "component", "design system", "ux", "ui pattern"
+      // CSS 기법/신기능
+      "scss", "sass", "css", "html", "animation", "transition", "scroll",
+      "grid", "flexbox", "flex", "layout", "z-index", "selector", "selects",
+      "popover", "dialog", "clip-path", "mask", "shape", "view transition",
+      "container query", "cascade", "specificity", "has()", "corner-shape",
+      "scroll-driven", "web standard", "border",
+      // 접근성/표준
+      "접근성", "a11y", "웹 표준", "마크업",
+      // 인터랙션/애니메이션
+      "인터랙션", "애니메이션", "반응형", "gsap",
+      // 도구
+      "figma", "피그마", "devtools",
+      // 성능
+      "core web vitals", "lighthouse", "performance"
     ]
   },
   {
@@ -280,7 +300,7 @@ function collectItems_() {
             text.toLowerCase().indexOf("<html") !== 0) {
           xml = text;
           if (cacheKey) {
-            try { cache.put(cacheKey, xml, 518400); } catch(e) {}
+            try { cache.put(cacheKey, xml, 1123200); } catch(e) {}
           }
         }
       }
@@ -373,6 +393,13 @@ function collectItems_() {
           if (DOMESTIC_BLOG_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
         }
 
+        // 퍼블 소스 전용 차단 패턴 (디자이너용 글, 만우절 글 등)
+        var isPublishingSource = PUBLISHING_SOURCES.indexOf(source.name) !== -1 ||
+                                 source.name === "Smashing Magazine";
+        if (isPublishingSource) {
+          if (PUBLISHING_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
+        }
+
         if (SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 ||
             SETTINGS.coreAiSourceNames.indexOf(source.name) !== -1) {
           var aiText = (cleanTitle + " " + (entry.summary || "")).toLowerCase();
@@ -387,26 +414,23 @@ function collectItems_() {
           var isBlocked = SETTINGS.youtubeBlockKeywords.some(function(k) { return lowerTitle.indexOf(k) !== -1; });
           if (isBlocked) { ytBlockedKw.push(cleanTitle); continue; }
 
-          // mustKeyword 체크 — 모든 채널 동일 적용 (신뢰채널 예외 없음)
+          // mustKeyword 체크 — 모든 채널 동일 적용
           var hasMust = SETTINGS.youtubeMustKeywords.some(function(k) { return lowerTitle.indexOf(k) !== -1; });
           if (!hasMust) { ytBlockedMust.push(cleanTitle); continue; }
           ytPassed++;
         }
 
-        // ← 변경: 요약 방식 분기 — Changelog는 summarizeRelease_, Blog는 일반 번역
         var isChangelog = SETTINGS.cursorChangelogSources.indexOf(source.name) !== -1;
         var isCursorBlog = SETTINGS.cursorBlogSources.indexOf(source.name) !== -1;
         var isOtherAiSource = SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 && !isCursorBlog;
 
         var summaryText = "";
         if (isChangelog || isOtherAiSource) {
-          // 릴리즈 노트 형식: bullet 파싱
           summaryText = summarizeRelease_(entry.summary);
           if (summaryText.length > 5) {
             try { summaryText = LanguageApp.translate(summaryText, "en", "ko"); } catch(e) {}
           }
         } else {
-          // 일반 블로그 포스트: 앞부분 자르고 번역
           var rawSummary = trimTo_(stripHtml_(entry.summary), SETTINGS.summaryMaxLen);
           if (rawSummary.length > 5) {
             try { summaryText = LanguageApp.translate(rawSummary, "", "ko"); } catch(e) { summaryText = rawSummary; }
@@ -479,6 +503,8 @@ function classifyCategory_(item, source) {
     return CATEGORIES.filter(function(c) { return c.key === "LIB_UPDATES"; })[0];
   }
 
+  // CSS-Tricks, web.dev, MDN Blog → PUBLISHING 강제 분류
+  // Smashing Magazine은 키워드 필터링으로 넘김
   if (PUBLISHING_SOURCES.indexOf(source.name) !== -1) {
     return CATEGORIES.filter(function(c) { return c.key === "PUBLISHING"; })[0];
   }
@@ -512,7 +538,7 @@ function scoreItem_(item, source, now) {
     score += Math.max(0, 30 - daysOld);
   }
 
-  var highValueKeywords = ["scss", "sass", "figma", "n8n", "make", "자동화", "접근성", "a11y", "반응형", "core web vitals", "web standard"];
+  var highValueKeywords = ["scss", "sass", "figma", "n8n", "make", "자동화", "접근성", "a11y", "반응형", "core web vitals", "web standard", "view transition", "container query"];
   score += highValueKeywords.filter(function(k) { return text.indexOf(k) !== -1; }).length * 15;
 
   if (source.kind === "youtube") score += 10;
