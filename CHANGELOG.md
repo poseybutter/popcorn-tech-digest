@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.8 (2026-04-13)
+
+-   **소스 교체:** GeekNews → 요즘IT(`yozm.wishket.com`) 교체
+-   **소스 추가:** Claude Code Changelog (anthropics/claude-code GitHub Releases Atom 피드)
+-   **소스 제거:** Anthropic News / Anthropic Engineering (서드파티 피드 불안정으로 제거)
+-   **CORE_AI 타이틀 변경:** "전사 도입 AI 필수 업데이트" → "전사 AI 툴 업데이트 소식"
+-   **라이브러리 안내 문구 수정:** "현재 사용 중인 안정 버전" → "이번 주 새 릴리즈 없음 — 최신 버전이에요"
+-   **CORE_AI_ALLOW_KEYWORDS 추가:** `anthropic`, `constitutional ai`, `responsible ai`, `ai safety`, `claude 3/4`, `claude opus/sonnet/haiku`, `sonnet`, `haiku`, `opus`
+-   **CORE_AI_BLOCK_PATTERNS 추가:** OpenAI 팀별 가이드 글(`for marketing/sales/operations teams`), 마케팅성 제목 패턴(`chatgpt for`, `using skills`, `prompting fundamentals` 등) 차단
+-   **HuggingFace 블로그 요약 폴백 처리:** `summarizeRelease_` 결과가 빈 경우 일반 번역으로 자동 폴백
+-   **Claude Code Changelog lookbackDays 7일 제한:** 주간 단위 최신 릴리즈만 수집하도록 소스별 lookback 설정
+-   **소스별 lookbackDays 옵션 추가:** SOURCES 배열에 `lookbackDays` 필드 추가 — 소스마다 개별 수집 기간 지정 가능
+
 ## v2.7 (2026-04-06)
 
 -   **CORE_AI 섹션 제목 수정:** `Cursor/Gemini` → `Cursor · Gemini · ChatGPT`
