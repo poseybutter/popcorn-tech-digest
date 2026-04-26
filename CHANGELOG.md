@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.10 (2026-04-26)
+
+-   **소스 교체:** 요즘IT → GeekNews (`news.hada.io`) 교체 (요즘IT 403 차단 확인)
+-   **소스 추가:** Figma 공식 블로그 RSS (`figma.com/blog/rss.xml`) — PUBLISHING 강제 분류 + 보너스 +20
+-   **유튜브 소스 전체 주석 처리:** 팀 참여도 개선을 위해 일시 비활성화, 필요시 복구 가능
+-   **GENERAL_RELEVANCE_KEYWORDS 대폭 확장:** `ai`, `mcp`, `claude`, `gemini`, `react`, `개선`, `도입`, `아키텍처`, `서비스` 등 추가 — 국내 기술 블로그 수집률 향상
+-   **DOMESTIC_SOURCES에 NAVER D2 추가:** DOMESTIC_BLOG_BLOCK_PATTERNS 필터 적용 대상 확장
+-   **DOMESTIC_BLOG_BLOCK_PATTERNS 추가:** DB/인프라 운영기, 양자암호, 하드웨어 장비, 데이터팀 조직 글, 수학/알고리즘 연구 글 차단
+-   **노이즈 패턴 추가:** `starrocks`, `victoriametrics`, `메트릭 저장소`, `plain text` 관련 글 차단
+
 ## v2.9 (2026-04-26)
 
 -   **Cursor Changelog 전용 피드 추가:** `any-feeds.com` 미러 기반 Cursor Changelog 피드 수집 (RSSHub 403 차단으로 대체)
