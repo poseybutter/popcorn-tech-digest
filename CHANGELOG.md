@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.9 (2026-04-26)
+
+-   **Cursor Changelog 전용 피드 추가:** `any-feeds.com` 미러 기반 Cursor Changelog 피드 수집 (RSSHub 403 차단으로 대체)
+-   **Cursor Changelog lookback 14일 확장:** 2주 주기 업데이트 특성 반영
+-   **Cursor Changelog allowlist 예외 처리:** 소스 자체가 Cursor 공식이므로 allowlist 키워드 체크 건너뜀
+-   **Cursor Changelog 메인 페이지 항목 차단:** `Changelog · Cursor` 형태의 개별 버전 아닌 항목 필터링
+-   **Google for Developers Gemini 태그 필터 적용:** `?tag=gemini` — Gemini 관련 글만 수집
+-   **Google DeepMind lookback 14일 확장:** Gemini 업데이트 주기 대응
+-   **jQuery 소스 제거:** PHP팀 요청 (3.5 이상 3.7 이하 버전 유지 정책)
+-   **OpenAI 도움말/가이드 페이지 차단:** `What is`, `How to`, `Top N uses`, `Working with` 등 패턴
+-   **유튜브 mustKeywords에 `codex` 추가**
+-   **PUBLISHING_BLOCK_PATTERNS 추가:** Astro 프레임워크 글, UX 디자이너 대상 글 차단
+-   **CORE_AI 섹션 제목에 Claude 추가:** `Cursor · Gemini · ChatGPT · Claude`
+-   **클릭 트래킹 웹앱(`tracker.gs`) 추가:** 보러가기 클릭 수를 Google Sheets에 기록, 화요일 주간 리포트 자동 발송
+-   **이번 주 바로 써먹기 섹션 추가:** Script Properties(`WEEKLY_TIP_TITLE`, `WEEKLY_TIP_URL`, `WEEKLY_TIP_DESC`)로 관리, 비워두면 미표시
+
 ## v2.8 (2026-04-13)
 
 -   **소스 교체:** GeekNews → 요즘IT(`yozm.wishket.com`) 교체
