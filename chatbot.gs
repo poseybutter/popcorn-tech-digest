@@ -109,7 +109,18 @@ var DOMESTIC_BLOG_BLOCK_PATTERNS = [
   /petzold|gui 전략|일관된.*전략|역사적.*분석/i,
   /show gn.*?(서버|백엔드|cli 도구|api|sdk|라이브러리 만들|봇 만들)/i,
   /saas|과금 모델|구독 모델|비즈니스 모델|go.?to.?market/i,
-  /암흑의 숲|인지적|철학적|사유|에세이/
+  /암흑의 숲|인지적|철학적|사유|에세이/,
+  // DB/인프라 운영기
+  /starrocks|victoriametrics|clickhouse|prometheus|grafana/i,
+  /메트릭 저장소|대규모 메트릭|검색.*운영기|운영기.*검색/,
+  // 보안/암호화
+  /양자|암호화|암호학|내성암호|zero.?trust/,
+  // 하드웨어/네트워크 장비
+  /usb 어댑터|gbe|랜카드|네트워크 장비|rdp|원격 데스크탑/i,
+  // 데이터팀/조직 관련
+  /데이터 팀|데이터팀|데이터 조직|ml 플랫폼|mlops/,
+  // 수학/알고리즘 연구
+  /erd[oő]s|수학 문제|알고리즘 문제|증명|plain text|플레인 텍스트/i
 ];
 
 var PUBLISHING_BLOCK_PATTERNS = [
@@ -125,17 +136,30 @@ var PUBLISHING_BLOCK_PATTERNS = [
 ];
 
 var GENERAL_RELEVANCE_KEYWORDS = [
+  // 퍼블/프론트 핵심
   "프론트엔드", "프론트", "퍼블", "마크업", "css", "html",
-  "javascript", "js", "typescript", "최적화", "성능", "생산성",
-  "협업", "자동화", "n8n", "make", "zapier", "figma", "피그마",
-  "ux", "ui", "디자인", "웹", "claude code", "cursor", "노코드", "vibe"
+  "javascript", "js", "typescript", "react", "vue", "next",
+  // 성능/품질
+  "최적화", "성능", "lighthouse", "core web vitals", "접근성",
+  // 도구/생산성
+  "생산성", "협업", "자동화", "n8n", "make", "zapier",
+  "figma", "피그마", "cursor", "claude code", "노코드", "vibe",
+  // AI/개발 트렌드
+  "ai", "llm", "mcp", "claude", "gemini", "chatgpt", "copilot",
+  "vibe coding", "에이전트", "agent",
+  // 디자인/UX
+  "ux", "ui", "디자인", "디자인 시스템", "컴포넌트",
+  // 웹 일반
+  "웹", "브라우저", "api", "sdk", "개발자",
+  // 국내 기술 블로그 자주 쓰는 표현
+  "개선", "도입", "전환", "리팩토링", "아키텍처", "서비스"
 ];
 
 var DOMESTIC_SOURCES = [
-  "요즘IT", "무신사 기술블로그", "29CM 기술블로그", "토스 테크", "당근 테크"
+  "GeekNews", "무신사 기술블로그", "29CM 기술블로그", "토스 테크", "당근 테크", "NAVER D2"
 ];
 
-var PUBLISHING_SOURCES = ["CSS-Tricks", "web.dev", "MDN Blog"];
+var PUBLISHING_SOURCES = ["CSS-Tricks", "web.dev", "MDN Blog", "Figma Blog"];
 
 var SOURCES = [
   // 🤖 AI & 공식 블로그
@@ -150,21 +174,21 @@ var SOURCES = [
   // Cursor Changelog 전용 피드 (cursor.com/changelog)
   { name: "Cursor Changelog",      url: "https://any-feeds.com/api/feeds/custom/cml03n27k0000ih04sx4hqg1e/rss.xml",  icon: "https://cursor.sh/favicon.ico",               kind: "rss_ai"  },
 
-  // 📺 유튜브
-  { name: "시민개발자 구씨",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCDLlMjELbrJdETmSiAB68AA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  { name: "노마드코더",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCUpJs89fSBXNolQGOYKn0YQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  { name: "조코딩",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYaDkwVaOhuoe_LuFr3lWkA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  { name: "개발동생",           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC1_ZZYZsHh2_DzCXN4VGVcQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  { name: "우아한테크",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC-mOekGSesms0agFntnQang", icon: "https://woowahan.com/favicon.ico",   kind: "youtube" },
-  { name: "토스",               url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCeg5g-vWgtgzQ0cYNV2Cyow", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  { name: "당근테크",            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC8tsBsQBuF7QybxgLmStihA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // 📺 유튜브 (일시 비활성화 — 필요시 주석 해제)
+  // { name: "시민개발자 구씨",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCDLlMjELbrJdETmSiAB68AA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // { name: "노마드코더",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCUpJs89fSBXNolQGOYKn0YQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // { name: "조코딩",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYaDkwVaOhuoe_LuFr3lWkA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // { name: "개발동생",           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC1_ZZYZsHh2_DzCXN4VGVcQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // { name: "우아한테크",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC-mOekGSesms0agFntnQang", icon: "https://woowahan.com/favicon.ico",   kind: "youtube" },
+  // { name: "토스",               url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCeg5g-vWgtgzQ0cYNV2Cyow", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
+  // { name: "당근테크",            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC8tsBsQBuF7QybxgLmStihA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
 
   // 📰 국내 기술 블로그
   { name: "무신사 기술블로그",   url: "https://techblog.musinsa.com/feed/",                icon: "https://techblog.musinsa.com/favicon.ico",     kind: "rss" },
   { name: "29CM 기술블로그",     url: "https://medium.com/feed/29cm",                     icon: "https://www.29cm.co.kr/favicon.ico",            kind: "rss" },
   { name: "토스 테크",           url: "https://toss.tech/rss.xml",                        icon: "https://toss.im/favicon.ico",                   kind: "rss" },
   { name: "당근 테크",           url: "https://medium.com/feed/daangn",                   icon: "https://www.daangn.com/favicon.ico",             kind: "rss" },
-  { name: "요즘IT",              url: "https://yozm.wishket.com/magazine/rss/",           icon: "https://yozm.wishket.com/favicon.ico",           kind: "rss" },
+  { name: "GeekNews",            url: "https://news.hada.io/rss/news",                    icon: "https://news.hada.io/favicon.ico",               kind: "rss" },
 
   // 📰 해외 퍼블리셔 블로그
   { name: "CSS-Tricks",          url: "https://css-tricks.com/feed/",                     icon: "https://css-tricks.com/favicon.ico",             kind: "rss" },
@@ -174,6 +198,7 @@ var SOURCES = [
   { name: "CSS Weekly",          url: "https://css-weekly.com/feed/",                     icon: "https://css-weekly.com/favicon.ico",             kind: "rss" },
   { name: "Frontend Focus",      url: "https://frontendfoc.us/rss",                       icon: "https://frontendfoc.us/favicon.ico",             kind: "rss" },
   { name: "NAVER D2",            url: "https://d2.naver.com/d2.atom",                     icon: "https://d2.naver.com/favicon.ico",               kind: "rss" },
+  { name: "Figma Blog",          url: "https://www.figma.com/blog/rss.xml",                icon: "https://www.figma.com/favicon.ico",              kind: "rss" },
 
   // 📦 필수 라이브러리 릴리즈
   { name: "Sass(SCSS) 공식",     url: "https://sass-lang.com/feed.xml",                   icon: "https://sass-lang.com/favicon.ico",              kind: "library", releasePageUrl: "https://github.com/sass/dart-sass/releases" },
@@ -592,6 +617,9 @@ function scoreItem_(item, source, now) {
   // ← 변경: Cursor Changelog 제거, Claude Code Changelog 추가
   var cursorSources = ["Cursor Blog", "Cursor Changelog", "Claude Code Changelog"];
   if (cursorSources.indexOf(source.name) !== -1) score += 40;
+
+  // Figma Blog 보너스
+  if (source.name === "Figma Blog") score += 20;
 
   // CSS Weekly, Frontend Focus 퍼블팀 특화 보너스
   var cssSpecialSources = ["CSS Weekly", "Frontend Focus"];
