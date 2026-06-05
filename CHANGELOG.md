@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.0 (2026-06-05) — 전면 재개편 · 리브랜딩 · 팀 스택 맞춤
+
+기존 다중 RSS + 방대한 차단 패턴 구조를 폐기하고, 국내 139개 기술블로그를 집계하는 **TechBlogPosts 통합 피드**를 메인으로 일원화했습니다. 이름도 `🍿 Popcorn Tech Digest` → **`🍿 위클리 테크레터`**로 바꾸고, 대상 팀(HTML·CSS·SCSS·JS·jQuery 퍼블, 공공기관 유지보수)에 맞춰 선별 기준을 재설계했습니다. 코드도 모던 스타일로 리팩토링(973줄 → 약 590줄).
+
+### 소스 (4타입)
+
+-   **메인** — TechBlogPosts 통합 피드 `https://www.techblogposts.com/rss.xml` (Atom, 한국어)
+-   **신뢰(`FRONTEND_FEEDS`, 코드 내장)** — CSS-Tricks·web.dev·Smashing·MDN. 관련성 게이트 면제 + 가점(영문 퍼블 전문 글 공급, 출처 라벨 고정)
+-   **큐레이션(`CURATED_FEEDS` 내장 + `EXTRA_FEEDS`)** — 인스타/Threads를 RSS.app 브릿지로. 게이트 면제 + 가점 + 썸네일/캡션 저장
+-   **전 분야(`FIREHOSE_FEEDS`)** — GeekNews 등. 가점 없이 관련성 키워드 통과분만 저장
+
+### 선별 (3단계 관련성 가중치)
+
+-   신선도(최대 +30) + **CORE×25 + AUX×10 − NEG×15** + 큐레이션/신뢰 가점(+20). 출처당 최대 2건, **엄선 5건** 발송
+-   **CORE** — 퍼블 핵심(HTML·CSS·SCSS·JS·jQuery) + **인터랙션(GSAP·Swiper·애니메이션·스크롤)** + **웹접근성·웹표준** + **KRDS·디자인시스템** + 레이아웃·성능
+-   **AUX** — **AI 활용·트렌드·생산성·AI 보안 취약점** + **백엔드 인지(Java·Spring·PHP)** + **형상관리(Git·SVN)**
+-   **NEG** — React·Vue·Svelte·Angular·Next.js 등 모던 SPA(현재 불필요) 감점
+
+### 카드 / 수집
+
+-   **하단 고정 링크:** Cursor 체인지로그 · Claude 릴리스 노트를 매주 카드 하단에 항상 노출(`PINNED_LINKS`)
+-   **2줄 미리보기 + 한글 번역(발송 5건 한정):** 피드 요약을 2줄 노출, 영문 제목·미리보기는 `LanguageApp`으로 번역(한국어면 그대로). techblogposts 메인은 피드에 요약이 없어 제목만(Medium 스크래핑 차단)
+-   **썸네일:** 큐레이션(인스타/Threads) 항목에 이미지가 있으면 노출
+-   **6시간 누적 수집(`dailyCollect`):** 최신 10건 한계 보완, 링크 기준 중복 제거 후 일자별 풀(`POOL_<날짜>`) 누적, 9일 경과 자동 정리
+-   **수집 안정화:** 피드당 최신 12건 제한, 발행일 최신순 + **바이트 기준 저장 상한**(한글 UTF-8 대비 9KB/값 보호), `?source=` 추적 파라미터 제거, rss.app 프로필 헤더·잡글(`EXCLUDE_TITLE_RE`) 제거
+-   **`setupTriggers()`** — `dailyCollect`(6시간) + `mainDigest`(월 13시) 트리거 자동 생성
+
+### 코드
+
+-   `var` → `const`/`let`, 화살표 함수 전환, 중복 제거(`makeItemWidgets_`·`buildTrackerUrl_`·`countHits_`·`capStore_`·`freshnessScore_`·`atomLink_` 등 헬퍼). 트리거/Run 진입점은 인식 위해 `function` 선언 유지. 보수적 회사에 맞춰 `합니다`체 톤
+
+### 제거
+
+-   AI 공식 피드(OpenAI/DeepMind/HuggingFace/Cursor/Claude Code) 직접 수집, 라이브러리 릴리즈(Sass/GSAP/Swiper) + 버전 캐시, 유튜브, 차단 패턴(국내 17 + AI 12 + 퍼블 7), 유튜브 키워드, 카테고리 분류기, Weekly Tip 섹션, 3줄 릴리즈 요약
+
+> 이전 버전은 `chatbot.gs.v2.10.bak`로 보존되어 있습니다. (Cursor·Claude 변경 소식은 직접 수집 대신 카드 하단 고정 링크로 대체)
+
 ## v2.10 (2026-04-26)
 
 -   **소스 교체:** 요즘IT → GeekNews (`news.hada.io`) 교체 (요즘IT 403 차단 확인)

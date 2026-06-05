@@ -1,8 +1,8 @@
-# 🍿 Popcorn Tech Digest Bot (퍼블팀 주간 큐레이션 봇)
+# 🍿 위클리 테크레터 (퍼블팀 주간 큐레이션 봇)
 
-Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/퍼블리싱 팀에게 꼭 필요한 IT 기술 트렌드와 업데이트 소식을 배달해 주는 **스마트 큐레이션 봇**입니다.
+Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/퍼블리싱 팀에게 이번 주 읽어볼 만한 국내 기술 글을 골라 배달하는 **큐레이션 봇**입니다.
 
-직장인이 가장 피곤함을 느끼는 **매주 월요일 오후 1시**, 식곤증과 월요병을 날려버릴 수 있도록 "퇴근길에 팝콘 먹듯 가볍고 재밌게" 소비할 수 있는 알짜배기 정보만 큐레이션하여 전송합니다.
+**매주 월요일 오후 1시**, 국내 139개 기술블로그(+선택한 추가 피드)에서 퍼블/AI 실무에 닿는 글만 엄선 5편을 Google Chat으로 전송합니다.
 
 ![Google Chat Card UI Example](https://img.shields.io/badge/Google_Chat-Cards_V2-blue?logo=googlechat)
 ![Language](<https://img.shields.io/badge/Language-JavaScript_(GAS)-yellow>)
@@ -17,68 +17,82 @@ Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/
 
 ## 기획 배경
 
--   **고객 선제적 서비스(Before Service):** 최신 기술 트렌드와 라이브러리 업데이트를 상시 모니터링하여, 고객의 요구가 있기 전 선제적으로 기술적 제안과 최적의 솔루션을 제공하기 위함입니다.
--   매일 쏟아지는 기술 블로그와 유튜브 영상 속에서 **실무에 진짜 필요한 정보만 필터링**할 필요성 대두.
--   전사적으로 적극 활용 중인 필수 스택(`Cursor`, `Gemini`, `Claude`, `Swiper`, `GSAP` 등)의 업데이트 소식을 팀원 모두가 빠르게 파악하고 프로젝트 품질과 생산성을 유지합니다.
+-   **단일 고품질 소스로 단순화(v3.0):** 여러 RSS를 직접 긁고 방대한 차단 패턴으로 노이즈를 막던 구조를, 국내 139개 기술블로그를 집계하는 [TechBlogPosts](https://www.techblogposts.com/ko) 통합 피드 **하나**로 일원화했습니다. 유지보수 부담을 크게 줄이고 국내·한국어 콘텐츠 중심으로 전환했습니다.
+-   매일 쏟아지는 국내 기술 블로그 글 속에서 **퍼블/프론트/AI 실무에 닿는 글만 가볍게** 골라 전달합니다.
 -   **공유 문화 조성:** 나른한 월요일 오후 시간대를 타겟팅하여, 팀 내 기술 인사이트 공유를 활성화하고 업무 리프레시를 돕습니다.
 
 ---
 
 ## 핵심 기능
 
-### 1. VVIP 카테고리 고정 - 우선순위 노출
+### 1. 단일 통합 소스 (TechBlogPosts)
 
-회사 필수 도입 툴 및 라이브러리의 릴리즈 소식은 다른 뉴스 알고리즘에 밀리지 않도록 **최상단 VVIP 섹션에 강제 고정 배치**합니다.
+국내 139개 기술블로그(토스·당근·무신사·네이버·카카오·쿠팡·우아한형제들 등)를 집계하는 [TechBlogPosts 통합 Atom 피드](https://www.techblogposts.com/rss.xml) **하나만** 구독합니다. 100% 한국어 콘텐츠라 번역이 필요 없고, 출처별 RSS를 직접 관리하던 부담이 사라졌습니다.
 
-### 2. Cursor/Claude Code 소스 우선 노출 (+40 보너스 점수)
+### 2. 6시간 누적 수집 (firehose 대응)
 
-전사 도입 툴인 Cursor와 Claude Code의 블로그/Changelog를 타 소스 대비 **+40 보너스 점수**로 항상 우선 노출합니다.
-Cursor 공식 블로그 RSS가 간헐적으로 불안정한 점을 보완하기 위해, **공식 피드와 비공식 미러 피드를 이중으로 수집**하고 제목 기반 중복 제거를 적용합니다.
+통합 피드는 **최신 10건**만 제공하므로, 주 1회 수집만으로는 대부분의 글을 놓칩니다. 이를 보완하기 위해 `dailyCollect()`가 **6시간마다** 피드를 읽어 링크 기준 중복을 제거하고 일자별 풀(`POOL_<날짜>`)에 누적합니다. 9일 지난 풀은 자동 정리됩니다.
 
-### 3. 소스 다양성 보장
+### 3. 관련성 가중치 선별 (팀 스택 맞춤)
 
-특정 출처가 섹션을 독점하지 않도록 소스별 최대 노출 개수를 제한합니다.
+매주 월요일 `mainDigest()`가 최근 7일 누적 풀에서 점수순으로 **엄선 5건**을 발송합니다. 키워드를 3단계로 차등해 **팀이 실제로 쓰고 공부하는 주제**가 주로 올라오게 합니다. (대상 팀: HTML·CSS·SCSS·JS·jQuery 퍼블, 공공기관 유지보수)
 
--   **CORE_AI 섹션:** 소스당 최대 1개, 최대 5개 전송 (여러 소스에서 골고루 노출)
--   **일반 섹션:** 소스당 최대 2개 제한
+-   **신선도:** 최신일수록 가점 (최대 +30)
+-   **CORE (매치당 +25):** 퍼블 핵심 — HTML·CSS·SCSS·JS·jQuery, **인터랙션(GSAP·Swiper·애니메이션·스크롤)**, **웹접근성·웹표준(공공기관 필수)**, **KRDS·디자인시스템**, 레이아웃·성능
+-   **AUX (매치당 +10):** 보조 — **AI 활용·트렌드·생산성, AI 보안 취약점**, **백엔드 인지(Java·Spring·PHP — 소통 비용 절감)**, **형상관리(Git·SVN)**
+-   **NEG (매치당 −15):** 현재 불필요 — React·Vue·Svelte·Angular·Next.js 등 모던 SPA 프레임워크 (가라앉힘)
+-   **하드 차단 없음:** 관련 글을 우선 노출하되, 부족하면 최신순으로 채워 빈손을 방지합니다.
+-   가중치는 `SETTINGS.coreWeight`/`auxWeight`/`negWeight`, 키워드는 `CORE_KEYWORDS`/`AUX_KEYWORDS`/`NEG_KEYWORDS` 배열에서 조정합니다.
 
-### 4. 7일 기준 최신 글만 수집
+### 4. 소스 다양성 보장
 
-지난 **7일 이내** 발행된 글만 수집하여 항상 그 주의 최신 소식만 전달합니다.
-(Cursor Changelog, Google DeepMind는 업데이트 주기 특성상 14일 기준 적용)
-(라이브러리 릴리즈 감지는 버전 누락 방지를 위해 30일 기준 유지)
+한 출처가 독점하지 않도록 **출처당 최대 2건**으로 제한합니다.
 
-### 5. 3줄 요약 & 한국어 자동 번역
+### 5. 카드 구성 · 2줄 미리보기 · 한글 번역
 
-영문으로 작성된 릴리즈 노트나 해외 블로그 글의 핵심 내용(버그 픽스, 신기능 등)을 3줄로 추출하고, **Google LanguageApp을 통해 한국어로 자동 번역**합니다. 한국어 원문은 번역을 건너뜁니다.
+각 항목은 **제목 · 출처 · 발행일 · 2줄 미리보기 · [보러가기] 버튼**으로 구성됩니다. 발송 직전 5건에만 다음을 적용합니다(가볍고 빠름).
 
-### 6. 스마트 노이즈 캔슬링
+-   **미리보기:** 피드가 제공하는 요약을 2줄로 표시. 해외 블로그(CSS-Tricks·Smashing·MDN)와 Threads는 요약이 있어 미리보기가 나오고, **techblogposts 메인(미리디 등 Medium 글 다수)은 피드가 요약을 주지 않아 제목만** 표시됩니다(Medium은 스크래핑도 차단).
+-   **한글 번역:** 영문 제목·미리보기는 `LanguageApp`으로 한국어 번역(이미 한국어면 그대로). 전체가 아닌 발송 5건만 번역해 비용이 적습니다.
+-   **썸네일:** 큐레이션(인스타/Threads)에 이미지가 있으면 함께 노출.
+-   **하단 고정 링크:** 카드 맨 아래에 **Cursor 체인지로그 · Claude 릴리스 노트**를 매주 고정 노출(전사 AI 툴 — 늘 챙겨봐야 하는 것). `PINNED_LINKS`에서 수정합니다.
 
--   직무와 무관한 뉴스(정치, 주총, 채용 등)를 네거티브 키워드로 차단합니다.
--   기업 홍보성 케이스 스터디, 유튜브 Shorts, 라이브 스트리밍을 원천 차단합니다.
--   여러 피드에서 동일 제목의 글이 수집될 경우 자동 중복 제거합니다.
+### 6. 소스 4타입
 
-### 7. 라이브러리 릴리즈 감지 & 버전 캐싱
+| 타입                 | 출처                                  | 처리 방식                                      |
+| -------------------- | ------------------------------------- | ---------------------------------------------- |
+| 메인                 | TechBlogPosts 통합 피드               | 소프트 가중치 (CORE/AUX 점수)                  |
+| 신뢰 (`FRONTEND_FEEDS`, 내장) | CSS-Tricks·web.dev·Smashing·MDN | 관련성 게이트 면제 + **가점** (모든 글이 퍼블 관련) |
+| 큐레이션 (`EXTRA_FEEDS`)      | 인스타/Threads 브릿지          | 게이트 면제 + **가점** · 썸네일 저장            |
+| 전 분야 (`FIREHOSE_FEEDS`)    | GeekNews 등                    | 가점 없음 · **관련성 키워드 통과분만 저장**     |
 
-Script Properties에 각 라이브러리의 최신 버전을 캐싱하여, **신규 릴리즈가 있을 때만 알림**합니다.
-신규 릴리즈가 없는 주에는 현재 안정 버전과 함께 **[릴리즈 보기] 버튼**을 제공합니다.
+`EXTRA_FEEDS`·`FIREHOSE_FEEDS`는 Script Properties에 URL을 줄바꿈/쉼표로 구분해 넣습니다. 모든 타입에 공통으로 월페이퍼·만우절·컨퍼런스 홍보 등 잡글은 `EXCLUDE_TITLE_RE`로 제외됩니다.
 
-### 8. 유튜브 캐시 폴백
+> **인스타그램/Threads 등 RSS가 없는 소스**는 [RSS.app](https://rss.app/) 같은 브릿지로 RSS를 만든 뒤 그 URL을 `EXTRA_FEEDS`에 넣으세요. (RSSHub 공개 인스턴스는 Threads 라우트가 403으로 막혀 권장하지 않음)
+> - **인스타그램**: 로그인 벽으로 직접 수집 불가 + 카드뉴스형은 썸네일·캡션·링크만 들어옴(이미지 속 글자는 못 읽음).
+> - **Threads**: 공개 프로필이라 더 안정적이고, 본문이 텍스트라 캡션이 온전히 들어옴. 같은 계정이면 **Threads 권장**.
+> - **GeekNews**: `https://news.hada.io/rss/news` (Atom). 전 분야라 `FIREHOSE_FEEDS`에 넣어 노이즈를 거릅니다.
 
-GAS 서버 IP 차단으로 유튜브 피드 수집에 실패하더라도, 이전에 성공한 데이터를 **CacheService에 13일간 보관**하여 가능한 한 안정적으로 영상을 제공합니다.
+#### 큐레이션 대상 계정 (브릿지 피드로 추가 예정)
 
-> 현재 유튜브 섹션은 팀 참여도 개선을 위해 일시 비활성화되어 있습니다. 소스는 코드에 주석으로 보존되어 있어 필요시 복구 가능합니다.
+각 계정을 RSS.app 등에서 피드로 변환해 `EXTRA_FEEDS`에 넣습니다. **Threads가 있으면 Threads 우선**(본문 텍스트가 온전히 수집됨).
 
-### 9. 클릭 트래킹
+| 계정          | Threads                         | Instagram                          | 비고            |
+| ------------- | ------------------------------- | ---------------------------------- | --------------- |
+| ai.brief.kr   | `@ai.brief.kr` (공개)           | `instagram.com/ai.brief.kr`        | AI 브리핑       |
+| ai.trend.kr   | `@ai.trend.kr` (공개)           | `instagram.com/ai.trend.kr`        | AI 트렌드       |
+| ai_freaks.kr  | —                               | `instagram.com/ai_freaks.kr`       | AI              |
+| design.yodi   | —                               | `instagram.com/design.yodi`        | 디자인(카드뉴스) |
 
-별도 GAS 웹앱(`tracker.gs`)을 통해 팀원들의 링크 클릭 수를 Google Sheets에 기록합니다.
-매주 화요일 오전 9시, 전주 발송분 클릭 리포트가 Google Chat으로 자동 발송됩니다.
+### 7. 썸네일 이미지
 
-### 10. 이번 주 바로 써먹기
+피드 항목에 이미지(`enclosure`/`media:content`/`media:thumbnail`)가 있으면 Google Chat 카드에 썸네일을 함께 노출합니다. (카드뉴스 훑어보기에 유용. 없으면 텍스트만)
 
-Script Properties에 `WEEKLY_TIP_TITLE`, `WEEKLY_TIP_URL`, `WEEKLY_TIP_DESC`를 입력하면 해당 주 뉴스레터에 💡 섹션이 추가됩니다. 비워두면 섹션이 표시되지 않습니다.
+### 8. 클릭 트래킹 (선택)
 
-### 11. 철저한 보안 관리
+별도 GAS 웹앱(`tracker.gs`)을 배포하고 `TRACKER_BASE_URL`을 지정하면 링크 클릭 수를 집계할 수 있습니다. 개편 효과(팀 참여도)를 측정하는 용도로 활용하세요.
+
+### 9. 철저한 보안 관리
 
 Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties` 환경 변수를 사용하여 외부 노출을 차단합니다.
 
@@ -86,122 +100,65 @@ Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties` 환경 변�
 
 ## 수집 소스 (Sources)
 
-### 🤖 AI 업데이트 소식
+| 소스                        | 종류            | 비고                                      |
+| --------------------------- | --------------- | ----------------------------------------- |
+| TechBlogPosts 통합 피드     | Atom (RSS)      | 국내 139개 기술블로그 집계, 한국어 (메인)        |
+| 퍼블 전문 블로그 (내장)     | RSS             | CSS-Tricks·web.dev·Smashing·MDN (영문, 게이트 면제) |
+| EXTRA_FEEDS (선택)          | RSS / Atom      | 큐레이션 추가 피드 (인스타/Threads 브릿지)       |
+| FIREHOSE_FEEDS (선택)       | RSS / Atom      | 전 분야 피드, 관련성 필터 (GeekNews 등)          |
 
-| 소스                                        | 종류 |
-| ------------------------------------------- | ---- |
-| Cursor Blog (공식 미러 피드)                | RSS  |
-| Cursor Changelog (any-feeds.com 미러)       | RSS  |
-| Claude Code Changelog (GitHub Releases)     | RSS  |
-| OpenAI Blog                                 | RSS  |
-| Google DeepMind                             | RSS  |
-| Google for Developers (Gemini 태그 필터)    | RSS  |
-| HuggingFace Blog                            | RSS  |
-
-### 📦 필수 라이브러리
-
-| 소스       | 릴리즈 페이지                           |
-| ---------- | --------------------------------------- |
-| Swiper     | github.com/nolimits4web/swiper/releases |
-| GSAP       | gsap.com/blog                           |
-| Sass(SCSS) | github.com/sass/dart-sass/releases      |
-
-### 🏢 IT 업계 / 실무
-
-| 소스              | 종류 |
-| ----------------- | ---- |
-| 무신사 기술블로그 | RSS  |
-| 토스 테크         | RSS  |
-| 당근 테크         | RSS  |
-| GeekNews          | RSS  |
-| CSS-Tricks        | RSS  |
-| web.dev           | RSS  |
-| Smashing Magazine | RSS  |
-| MDN Blog          | RSS  |
-| CSS Weekly        | RSS  |
-| Frontend Focus    | RSS  |
-| NAVER D2          | RSS  |
-| Figma Blog        | RSS  |
-
-### 📺 유튜브 (7개 채널)
-
-| 채널            | 분류                 |
-| --------------- | -------------------- |
-| 개발동생        | AI 도구 / 프론트엔드 |
-| 조코딩          | AI 도구 / 웹개발     |
-| 노마드코더      | 웹개발               |
-| 우아한테크      | 테크                 |
-| 토스            | 테크                 |
-| 당근테크        | 테크                 |
-| 시민개발자 구씨 | 노코드 / AI          |
-
-> ⚠️ 유튜브 섹션은 현재 일시 비활성화 상태입니다. 소스 코드에 주석으로 보존되어 있으며 필요시 복구 가능합니다.
+> 메인 피드: `https://www.techblogposts.com/rss.xml` · 퍼블 전문 블로그는 코드의 `FRONTEND_FEEDS`에서 추가·수정
 
 ---
 
-## 카테고리 구조
+## 동작 흐름
 
-| 섹션                                        | 설명                                            | 우선순위           |
-| ------------------------------------------- | ----------------------------------------------- | ------------------ |
-| 🤖 전사 AI 툴 업데이트 소식                 | Cursor, Claude Code, Gemini 등 AI 툴 최신 소식  | VVIP (최상단 고정) |
-| 📦 필수 라이브러리 릴리즈                   | Swiper, GSAP, SCSS 공식 업데이트                | VVIP (최상단 고정) |
-| 💡 이번 주 바로 써먹기                      | 매주 직접 선정하는 실무 Tip of the Week         | 상단               |
-| 🌟 금주의 팝콘 픽                           | 알고리즘 점수 기반 가장 추천하는 아티클 Top 3   | 상단               |
-| ✨ UI/UX 퍼블리싱 & 인터랙션                | CSS, 접근성, 인터랙션 관련 실무 팁              | 중간               |
-| 🏢 IT 업계 실무 & 자동화 꿀팁               | 업무 자동화, 프론트엔드 최적화 관련 소식        | 중간               |
-| 📺 주말에 몰아보는 코딩 유튜브              | 엄선된 실무 유튜브 영상 (현재 비활성화)          | 하단               |
+| 함수             | 트리거            | 설명                                                  |
+| ---------------- | ----------------- | ----------------------------------------------------- |
+| `dailyCollect()` | 6시간마다         | 피드(최신 10건)를 누적 풀에 저장, 오래된 풀 정리       |
+| `mainDigest()`   | 매주 월요일 13시  | 최근 7일 풀에서 점수순 엄선 5건 발송                   |
+| `setupTriggers()`| 최초 1회 수동     | 위 두 트리거를 자동 생성                               |
 
 ---
 
 ## 사용 기술 (Tech Stack)
 
 -   **Language:** JavaScript (Google Apps Script)
--   **API/Integration:** Google Chat Webhook API (Cards V2), Google LanguageApp, CacheService, PropertiesService
--   **Data Processing:** XML / RSS / Atom Feed Parsing, UrlFetchApp.fetchAll (병렬 수집)
+-   **API/Integration:** Google Chat Webhook API (Cards V2), PropertiesService, ScriptApp(Triggers)
+-   **Data Processing:** Atom Feed Parsing (XmlService), 일자별 누적 풀 관리
 
 ---
 
 ## 설치 및 세팅 방법 (Installation)
 
-### chatbot.gs 세팅
-
 1. [Google Apps Script](https://script.google.com/)에 접속하여 새 프로젝트를 생성합니다.
 2. 본 저장소의 `chatbot.gs` 코드를 복사하여 에디터에 붙여넣습니다.
 3. 알림을 받을 Google Chat 스페이스에서 **[웹후크 관리]**를 통해 URL을 발급받습니다.
-4. GAS 에디터 좌측 톱니바퀴(프로젝트 설정) > **[스크립트 속성]**에 다음을 추가합니다.
-    - **속성:** `WEBHOOK_URL` / **값:** 발급받은 웹후크 주소
+4. GAS 에디터 좌측 톱니바퀴(프로젝트 설정) > **[스크립트 속성]**에 추가합니다.
+    - **속성:** `WEBHOOK_URL` / **값:** 발급받은 웹후크 주소 (필수)
     - **속성:** `TRACKER_BASE_URL` / **값:** tracker.gs 배포 후 발급받은 웹앱 URL (선택)
-5. **최초 1회** `seedLibVersionCache()` 함수를 수동 실행하여 현재 라이브러리 버전을 캐시에 저장합니다.
-    > ⚠️ 이 과정을 생략하면 첫 주에 모든 라이브러리가 신규 릴리즈로 오탐됩니다.
-6. 좌측 시계 아이콘(트리거) 메뉴에서 `mainDigest` 함수가 **매주 월요일 오후 1시 ~ 2시** 사이에 실행되도록 [시간 주도형] 트리거를 설정합니다.
+    - **속성:** `EXTRA_FEEDS` / **값:** 큐레이션 피드 URL — 인스타/Threads 브릿지 (줄바꿈·쉼표 구분, 선택)
+    - **속성:** `FIREHOSE_FEEDS` / **값:** 전 분야 피드 URL — 예: `https://news.hada.io/rss/news` (선택)
+5. **최초 1회** `setupTriggers()` 함수를 수동 실행합니다.
+    - `dailyCollect`(6시간마다) + `mainDigest`(월요일 13시) 트리거가 자동 생성됩니다.
+    - 며칠간 풀이 쌓인 뒤 첫 발송이 가장 풍성합니다. 바로 테스트하려면 `dailyCollect()`를 몇 번 수동 실행한 뒤 `debugDigest()`로 확인하세요.
 
 ### tracker.gs 세팅 (선택)
 
 1. GAS에서 **새 프로젝트** 별도 생성 후 `tracker.gs` 코드를 붙여넣습니다.
 2. Script Properties에 `WEBHOOK_URL` 추가 (chatbot과 동일한 주소).
 3. 배포 → 새 배포 → 웹 앱 (실행 계정: 나, 액세스 권한: 모든 사용자).
-4. 배포된 웹앱 URL을 chatbot.gs의 `SETTINGS.trackerBaseUrl`에 입력합니다.
-5. `sendWeeklyReport` 함수를 **매주 화요일 오전 9시** 트리거로 등록합니다.
-
-### 이번 주 바로 써먹기 사용법
-
-매주 발송 전 chatbot.gs Script Properties에 입력:
-
-| 속성                | 설명                        |
-| ------------------- | --------------------------- |
-| `WEEKLY_TIP_TITLE`  | Tip 제목 (필수)             |
-| `WEEKLY_TIP_URL`    | 원본 링크 (필수)            |
-| `WEEKLY_TIP_DESC`   | 한 줄 설명 (선택)           |
-
-비워두면 해당 주 섹션이 표시되지 않습니다.
+4. 배포된 웹앱 URL을 chatbot.gs Script Properties의 `TRACKER_BASE_URL`에 입력합니다.
 
 ### 디버그 & 유지보수 함수
 
-| 함수                     | 설명                                          |
-| ------------------------ | --------------------------------------------- |
-| `debugDigest()`          | 수집 현황 및 유튜브 필터링 진단 로그 출력     |
-| `seedLibVersionCache()`  | 현재 라이브러리 버전을 캐시에 저장 (최초 1회) |
-| `resetLibVersionCache()` | 라이브러리 버전 캐시 초기화                   |
+| 함수              | 설명                                              |
+| ----------------- | ------------------------------------------------- |
+| `dailyCollect()`  | 피드 수집 수동 실행 (테스트용)                    |
+| `debugDigest()`   | 누적 풀 현황 + 이번 주 선별 5건 미리보기 로그     |
+| `mainDigest()`    | 발송 수동 실행                                     |
+| `resetPool()`     | 누적 풀 전체 초기화                               |
+| `setupTriggers()` | 트리거 생성 / `clearTriggers()` 트리거 제거       |
 
 ---
 
@@ -284,4 +241,4 @@ GitHub에서 Fork 저장소로 이동 후 **"Compare & pull request"** 버튼을
 유튜브 소스 다양성 강화
 ```
 
-> PR을 보내주시면 검토 후 머지하겠습니다. 언제든지 아이디어와 개선사항을 공유해 주세요! 🍿
+> PR을 보내주시면 검토 후 머지하겠습니다. 언제든지 아이디어와 개선사항을 공유해 주세요! 📬

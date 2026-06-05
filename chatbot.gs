@@ -1,973 +1,590 @@
 /**
- * 🍿 퍼블팀 주간 뉴스레터 봇
- * 최신 변경 이력은 README.md의 Changelog를 참고하세요.
+ * 🍿 위클리 테크레터 (퍼블팀 주간 큐레이션 봇) — v3.0
+ *
+ * 메인 소스: TechBlogPosts 통합 피드(국내 139개 기술블로그 집계, 한국어).
+ *   - 피드가 "최신 10건"만 주므로 6시간마다 누적 수집(dailyCollect)
+ *   - 매주 월요일 누적 풀에서 관련성 점수로 엄선 5건 발송(mainDigest)
+ *
+ * 소스 타입: main(techblogposts) / trusted(해외 퍼블 블로그, 내장) /
+ *   curated(인스타·Threads 브릿지) / firehose(GeekNews 등, 관련성 필터).
+ *
+ * 점수: 신선도 + CORE(팀 핵심: 퍼블·인터랙션·접근성·KRDS)×coreWeight
+ *       + AUX(AI툴·백엔드 인지·형상관리)×auxWeight − NEG(React/Vue 등)×negWeight
+ *       + 큐레이션/신뢰 소스 가점.
+ *
+ * 최초 1회: setupTriggers() 실행 → 6시간 수집 + 월요일 발송 트리거 자동 생성.
+ * Script Properties: WEBHOOK_URL(필수), TRACKER_BASE_URL·EXTRA_FEEDS·FIREHOSE_FEEDS(선택).
+ * 자세한 이력은 README.md / CHANGELOG.md 참고.
+ *
+ * 참고: GAS 트리거·에디터 Run이 인식하도록 진입점은 function 선언, 내부 헬퍼는 화살표 함수.
  */
 
-var YT_LOG = [];
+const SETTINGS = {
+  feedUrl: "https://www.techblogposts.com/rss.xml",
 
-var SETTINGS = {
-  maxItemsPerSource: 12,
-  maxSendPerCategory: 5,
-  lookbackDays: 30,
-  maxPerSourceInDigest: 2,
-  youtubeLookbackDays: 14,
+  maxSend: 5,            // 주간 발송 건수
+  poolDays: 7,           // 누적 풀 보존/선별 기간
+  maxPerSource: 2,       // 한 출처 최대 노출 건수 (다양성)
+  maxStorePerDay: 35,    // 하루치 저장 상한(건수) — 바이트 상한과 함께 적용
+  maxStoreBytes: 8500,   // 하루치 저장 상한(바이트) — Properties 9KB/값 보호(한글 UTF-8 대비)
+  titleMaxLen: 90,
+  summaryMaxLen: 150,
 
-  summaryMaxLen: 120,
-  titleMaxLen: 80,
+  coreWeight: 25,        // CORE 매치당 가점 (팀 핵심)
+  auxWeight: 10,         // AUX 매치당 가점 (보조)
+  negWeight: 15,         // NEG 매치당 감점 (현재 불필요 주제)
+  extraFeedBonus: 20,    // 신뢰/큐레이션 소스 가점
 
-  youtubeMustKeywords: [
-    "css", "scss", "sass", "html", "a11y", "gsap", "swiper", "jquery",
-    "javascript", "typescript", "tailwind", "next.js", "nextjs", "react",
-    "figma", "cursor", "claude", "gemini", "devtools",
-    "퍼블", "퍼블리싱", "마크업", "웹", "프론트", "프론트엔드",
-    "반응형", "접근성", "인터랙션", "애니메이션", "클론코딩", "클론 코딩",
-    "웹사이트 만들기", "웹개발", "웹 개발", "포트폴리오",
-    "ui", "ux", "피그마", "성능", "최적화",
-    "자동화", "노코드", "노 코드", "n8n", "make", "zapier",
-    "ai", "llm", "에이전트", "agent", "생산성", "vibe coding", "vibe코딩", "바이브코딩",
-    "클로드코드", "claude code", "replit", "codex",
-    "실전", "튜토리얼", "강의", "업무",
-    "만들기", "구현", "따라하기", "코딩", "개발", "빌드", "제작",
-    "자동", "봇", "gpt", "챗봇", "노션", "obsidian", "슬랙", "slack"
-  ],
+  perFeedLimit: 12,      // 피드당 1회 수집 상한 (콜드스타트 백로그 방지)
 
-  youtubeBlockKeywords: [
-    "주식", "매매", "코인", "게임", "먹방", "asmr", "브이로그",
-    "shorts", "일상", "여행", "개그", "예능", "스트리밍 중", "라이브",
-    "솔라피", "광고", "협찬", "후원", "홍보", "이벤트", "무료특강",
-    "지금 신청", "선착순", "할인", "프로모션", "공구", "체험단",
-    "부트캠프", "사전설명회", "tmux",
-    "자영업", "마케팅", "병의원", "crm", "채용합니다", "취업"
-  ],
-
-  // ← 변경: Cursor Changelog 제거 (GitHub Releases 비어있음), Claude Code Changelog만 유지
-  cursorChangelogSources: ["Cursor Changelog", "Claude Code Changelog"],
-  cursorBlogSources: ["Cursor Blog"],
-
-  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
-
-  // 클릭 트래커 웹앱 URL (tracker.gs 배포 후 입력, 비워두면 트래킹 비활성화)
-  trackerBaseUrl: "",  // 예: "https://script.google.com/macros/s/XXXX/exec"
-
-  // ← 변경: Cursor Changelog 제거
-  coreAiSourceNames: [
-    "OpenAI Blog", "Google DeepMind", "Google for Developers",
-    "HuggingFace Blog", "Cursor Blog", "Cursor Changelog", "Claude Code Changelog"
-  ],
-  coreAiSourceKinds: ["rss_ai"]
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 };
 
-var CORE_AI_ALLOW_KEYWORDS = [
-  "cursor", "composer",
-  "gemini", "google ai studio", "notebooklm", "vertex ai",
-  "chatgpt", "claude", "gpt-4", "gpt-5", "gpt-4o", "codex",
-  "claude code", "vibe coding", "ai 코딩", "코딩 에이전트",
-  "mcp", "copilot",
-  "ai agent", "ai 에이전트", "llm api", "프롬프트 엔지니어링",
-  "anthropic", "constitutional ai", "responsible ai", "ai safety",
-  "claude 3", "claude 4", "claude opus", "claude sonnet", "claude haiku",
-  "sonnet", "haiku", "opus"
-];
-
-var EXCLUDE_KEYWORDS = [
-  "국방부", "해커톤", "부스", "mwc", "ces", "채용", "주총", "사고", "사건",
-  "정치", "선거", "대통령", "국회",
-  "전쟁", "연료", "제조업", "창업", "투자", "ipo", "인수 완료", "채권", "환율",
-  "wallpaper", "wallpapers", "conference", "conf ", "smashingconf", "meet smashing",
-  "amsterdam", "월페이퍼", "바탕화면"
-];
-
-var CORE_AI_BLOCK_PATTERNS = [
-  /\b(fixes|boosts|enables|built an|using openai|with openai|with chatgpt|case study)\b/i,
-  /^[A-Z][a-zA-Z\s]+ (reshapes|transforms|reinvents|reimagines|revolutionizes|leverages|deploys|adopts|launches)/i,
-  /\b(save the date|google i\/o|cloud next|build hour|conference|summit|event)\b/i,
-  /\b(india|vegas|amsterdam|london|new york)\b/i,
-  /\b(dataset|benchmark|leaderboard|paper|arxiv|fine.?tun|checkpoint|weights|inference|training|diffusion|llama|mistral|falcon|phi-|qwen|deepseek)\b/i,
-  /^(liberate|unleash|introducing|announcing|welcoming)\b/i,
-  /\b(bank|insurance|financial|account manager|enterprise customer|every customer)\b/i,
-  /accelerating.*phase|next phase of ai|the future of|vision for|our approach to/i,
-  /\bfor (marketing|sales|operations|finance|hr|legal) teams?\b/i,
-  /^(prompting fundamentals|responsible and safe use|using projects in|chatgpt for|using skills|using [a-z]+ in chatgpt)/i,
-  // OpenAI 도움말/가이드 페이지 (블로그 글 아님)
-  /^(what is |how to |top [0-9]+ |working with |plugins and |workspace agents|codex settings|making chatgpt)/i,
-  // 의료/특정 직군 대상 글
-  /(clinicians|physicians|healthcare|radiolog|patholog)/i
-];
-
-var DOMESTIC_BLOG_BLOCK_PATTERNS = [
-  /보안|취약점|해킹|침해|랜섬웨어|악성코드|보안 악몽|보안 위협|취약점 분석|보안 분석|침투 테스트|버그 바운티/,
-  /\b(exploit|cve|zero.?day|ddos)\b/i,
-  /블록체인|nft|web3|dao|defi|crypto|solidity/,
-  /\b(postgres|mysql|redis|mongodb|elasticsearch|kafka|hadoop)\b/i,
-  /쿠버네티스|kubernetes|helm|terraform/,
-  /머신러닝|딥러닝|파인튜닝|모델 학습|데이터셋|레이블링/,
-  /ios 앱|안드로이드 앱|flutter|앱스토어/i,
-  /\bswift\b|\bkotlin\b/i,
-  /ai를 쓰는 회사|ai를 만드는 회사|조직 문화|채용 전략|리더십|직무 통합|조직 개편|직무를|직군/,
-  /\b(rust|golang|java|c\+\+|python)\b.*(파서|컴파일|런타임|바이너리)/i,
-  /hwp|hwpx|파서|ram 요구|ubuntu.*windows|windows.*ubuntu/i,
-  /petzold|gui 전략|일관된.*전략|역사적.*분석/i,
-  /show gn.*?(서버|백엔드|cli 도구|api|sdk|라이브러리 만들|봇 만들)/i,
-  /saas|과금 모델|구독 모델|비즈니스 모델|go.?to.?market/i,
-  /암흑의 숲|인지적|철학적|사유|에세이/,
-  // DB/인프라 운영기
-  /starrocks|victoriametrics|clickhouse|prometheus|grafana/i,
-  /메트릭 저장소|대규모 메트릭|검색.*운영기|운영기.*검색/,
-  // 보안/암호화
-  /양자|암호화|암호학|내성암호|zero.?trust/,
-  // 하드웨어/네트워크 장비
-  /usb 어댑터|gbe|랜카드|네트워크 장비|rdp|원격 데스크탑/i,
-  // 데이터팀/조직 관련
-  /데이터 팀|데이터팀|데이터 조직|ml 플랫폼|mlops/,
-  // 수학/알고리즘 연구
-  /erd[oő]s|수학 문제|알고리즘 문제|증명|plain text|플레인 텍스트/i
-];
-
-var PUBLISHING_BLOCK_PATTERNS = [
-  /design principle|design pattern|design system/i,
-  /april.?fool|fools/i,
-  /\b(ux research|user research|usability|persona|user journey|wireframe)\b/i,
-  /olfactive|haptic|smell|taste.*css|css.*smell/i,
-  /doom|quake|minecraft|\b3d\b.*css|css.*\b3d\b|rendering.*game|game.*rendering/i,
-  // Astro 프레임워크 글 (퍼블팀 실무 무관)
-  /\bastro\b/i,
-  // UX 디자이너 대상 글
-  /ux designer|ux writer|design deliverable/i
-];
-
-var GENERAL_RELEVANCE_KEYWORDS = [
-  // 퍼블/프론트 핵심
-  "프론트엔드", "프론트", "퍼블", "마크업", "css", "html",
-  "javascript", "js", "typescript", "react", "vue", "next",
+// CORE = 팀이 실제로 쓰고 공부하는 주제 (퍼블/인터랙션/접근성/표준/KRDS) — 큰 가점
+const CORE_KEYWORDS = [
+  // 마크업/스타일 (실제 스택: HTML·CSS·SCSS·JS·jQuery)
+  "html", "css", "scss", "sass", "less", "마크업", "퍼블", "퍼블리싱", "스타일",
+  "javascript", "js", "자바스크립트", "jquery", "제이쿼리", "바닐라", "vanilla",
+  // 인터랙션/애니메이션 (지속 학습: GSAP·Swiper)
+  "gsap", "scrolltrigger", "swiper", "슬라이더", "slider", "캐러셀", "carousel",
+  "애니메이션", "animation", "transition", "트랜지션", "transform", "keyframe",
+  "인터랙션", "interaction", "interactive", "인터랙티브", "모션", "motion", "lottie",
+  "scroll", "스크롤", "scroll-driven", "패럴랙스", "parallax", "gesture",
+  "마이크로 인터랙션", "micro-interaction", "hover", "호버",
+  // 레이아웃/시각
+  "layout", "레이아웃", "grid", "subgrid", "flex", "flexbox", "반응형", "responsive",
+  "container query", "has()", "clamp", "z-index", "clip-path", "mask",
+  "타이포", "typography", "폰트", "font", "웹폰트", "svg", "canvas", "webgl",
+  // 접근성/웹표준 (공공기관 필수)
+  "접근성", "웹접근성", "a11y", "wcag", "스크린리더", "screen reader", "aria",
+  "시맨틱", "semantic", "웹표준", "웹 표준", "web standard", "크로스브라우징",
+  // KRDS / 디자인시스템
+  "krds", "디자인시스템", "디자인 시스템", "design system", "디자인 토큰", "design token",
+  "컴포넌트", "component", "전자정부", "정부 웹", "공공",
   // 성능/품질
-  "최적화", "성능", "lighthouse", "core web vitals", "접근성",
-  // 도구/생산성
-  "생산성", "협업", "자동화", "n8n", "make", "zapier",
-  "figma", "피그마", "cursor", "claude code", "노코드", "vibe",
-  // AI/개발 트렌드
-  "ai", "llm", "mcp", "claude", "gemini", "chatgpt", "copilot",
-  "vibe coding", "에이전트", "agent",
-  // 디자인/UX
-  "ux", "ui", "디자인", "디자인 시스템", "컴포넌트",
-  // 웹 일반
-  "웹", "브라우저", "api", "sdk", "개발자",
-  // 국내 기술 블로그 자주 쓰는 표현
-  "개선", "도입", "전환", "리팩토링", "아키텍처", "서비스"
+  "성능", "최적화", "performance", "lighthouse", "core web vitals", "web vitals",
+  "렌더링", "render", "reflow", "repaint", "fps", "dom", "브라우저", "browser", "devtools"
 ];
 
-var DOMESTIC_SOURCES = [
-  "GeekNews", "무신사 기술블로그", "29CM 기술블로그", "토스 테크", "당근 테크", "NAVER D2"
+// AUX = 보조 관심사 (AI 활용·생산성·백엔드 소통·형상관리) — 작은 가점
+const AUX_KEYWORDS = [
+  // AI 활용/트렌드/생산성
+  "ai", "에이아이", "llm", "gpt", "claude", "클로드", "gemini", "제미나이", "chatgpt",
+  "copilot", "cursor", "커서", "mcp", "codex", "코덱스", "obsidian", "옵시디언", "notion", "노션",
+  "에이전트", "agent", "프롬프트", "prompt", "vibe", "바이브", "생산성", "자동화", "n8n",
+  // AI 보안 취약점
+  "ai 보안", "프롬프트 인젝션", "prompt injection", "jailbreak", "탈옥", "보안 취약", "취약점",
+  // 백엔드 소통 비용 절감용 인지 (공공기관 스택)
+  "java", "자바", "spring", "스프링", "php", "백엔드", "backend", "api", "sql", "데이터베이스", "database",
+  // 형상관리/개발 일반
+  "git", "깃", "svn", "형상관리", "버전 관리", "오픈소스", "open source", "라이브러리", "library",
+  "코드", "코딩", "개발자", "리팩토링", "cli", "sdk"
 ];
 
-var PUBLISHING_SOURCES = ["CSS-Tricks", "web.dev", "MDN Blog", "Figma Blog"];
-
-var SOURCES = [
-  // 🤖 AI & 공식 블로그
-  { name: "OpenAI Blog",           url: "https://openai.com/news/rss.xml",                                           icon: "https://openai.com/favicon.ico",              kind: "rss_ai"  },
-  { name: "Google DeepMind",       url: "https://deepmind.google/blog/rss.xml",                                      icon: "https://deepmind.google/favicon.ico",         kind: "rss_ai"  },
-  // Gemini 태그 필터 피드 — Gemini 관련 글만 수집
-  { name: "Google for Developers", url: "https://developers.googleblog.com/feeds/posts/default?tag=gemini", icon: "https://developers.google.com/favicon.ico",   kind: "rss_ai"  },
-  { name: "HuggingFace Blog",      url: "https://huggingface.co/blog/feed.xml",                                      icon: "https://huggingface.co/favicon.ico",          kind: "rss_ai"  },
-  { name: "Claude Code Changelog", url: "https://github.com/anthropics/claude-code/releases.atom",                   icon: "https://anthropic.com/favicon.ico",           kind: "rss_ai"  },
-  // Cursor Blog 미러 피드
-  { name: "Cursor Blog",           url: "https://any-feeds.com/api/feeds/custom/cmkoaiogm0000lf04qmtirq2g/rss.xml", icon: "https://cursor.sh/favicon.ico",               kind: "rss_ai"  },
-  // Cursor Changelog 전용 피드 (cursor.com/changelog)
-  { name: "Cursor Changelog",      url: "https://any-feeds.com/api/feeds/custom/cml03n27k0000ih04sx4hqg1e/rss.xml",  icon: "https://cursor.sh/favicon.ico",               kind: "rss_ai"  },
-
-  // 📺 유튜브 (일시 비활성화 — 필요시 주석 해제)
-  // { name: "시민개발자 구씨",     url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCDLlMjELbrJdETmSiAB68AA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  // { name: "노마드코더",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCUpJs89fSBXNolQGOYKn0YQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  // { name: "조코딩",             url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCYaDkwVaOhuoe_LuFr3lWkA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  // { name: "개발동생",           url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC1_ZZYZsHh2_DzCXN4VGVcQ", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  // { name: "우아한테크",          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC-mOekGSesms0agFntnQang", icon: "https://woowahan.com/favicon.ico",   kind: "youtube" },
-  // { name: "토스",               url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCeg5g-vWgtgzQ0cYNV2Cyow", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-  // { name: "당근테크",            url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC8tsBsQBuF7QybxgLmStihA", icon: "https://www.youtube.com/favicon.ico", kind: "youtube" },
-
-  // 📰 국내 기술 블로그
-  { name: "무신사 기술블로그",   url: "https://techblog.musinsa.com/feed/",                icon: "https://techblog.musinsa.com/favicon.ico",     kind: "rss" },
-  { name: "29CM 기술블로그",     url: "https://medium.com/feed/29cm",                     icon: "https://www.29cm.co.kr/favicon.ico",            kind: "rss" },
-  { name: "토스 테크",           url: "https://toss.tech/rss.xml",                        icon: "https://toss.im/favicon.ico",                   kind: "rss" },
-  { name: "당근 테크",           url: "https://medium.com/feed/daangn",                   icon: "https://www.daangn.com/favicon.ico",             kind: "rss" },
-  { name: "GeekNews",            url: "https://news.hada.io/rss/news",                    icon: "https://news.hada.io/favicon.ico",               kind: "rss" },
-
-  // 📰 해외 퍼블리셔 블로그
-  { name: "CSS-Tricks",          url: "https://css-tricks.com/feed/",                     icon: "https://css-tricks.com/favicon.ico",             kind: "rss" },
-  { name: "web.dev",             url: "https://web.dev/feed.xml",                         icon: "https://web.dev/favicon.ico",                   kind: "rss" },
-  { name: "Smashing Magazine",   url: "https://www.smashingmagazine.com/feed/",           icon: "https://www.smashingmagazine.com/favicon.ico",   kind: "rss" },
-  { name: "MDN Blog",            url: "https://developer.mozilla.org/en-US/blog/rss.xml", icon: "https://developer.mozilla.org/favicon.ico",     kind: "rss" },
-  { name: "CSS Weekly",          url: "https://css-weekly.com/feed/",                     icon: "https://css-weekly.com/favicon.ico",             kind: "rss" },
-  { name: "Frontend Focus",      url: "https://frontendfoc.us/rss",                       icon: "https://frontendfoc.us/favicon.ico",             kind: "rss" },
-  { name: "NAVER D2",            url: "https://d2.naver.com/d2.atom",                     icon: "https://d2.naver.com/favicon.ico",               kind: "rss" },
-  { name: "Figma Blog",          url: "https://www.figma.com/blog/rss.xml",                icon: "https://www.figma.com/favicon.ico",              kind: "rss" },
-
-  // 📦 필수 라이브러리 릴리즈
-  { name: "Sass(SCSS) 공식",     url: "https://sass-lang.com/feed.xml",                   icon: "https://sass-lang.com/favicon.ico",              kind: "library", releasePageUrl: "https://github.com/sass/dart-sass/releases" },
-  { name: "GSAP Releases",       url: "https://github.com/greensock/GSAP/releases.atom",  icon: "https://gsap.com/favicon.ico",                   kind: "library", releasePageUrl: "https://gsap.com/blog/" },
-  { name: "Swiper Releases",     url: "https://github.com/nolimits4web/swiper/releases.atom", icon: "https://swiperjs.com/favicon.ico",           kind: "library", releasePageUrl: "https://github.com/nolimits4web/swiper/releases" }
+// NEG = 현재 팀에 불필요한 주제 (모던 SPA 프레임워크) — 감점해서 가라앉힘
+const NEG_KEYWORDS = [
+  "react", "리액트", "vue", "vue.js", "svelte", "스벨트", "angular", "앵귤러",
+  "next.js", "nextjs", "nuxt", "solidjs", "remix"
 ];
 
-var CATEGORIES = [
-  { key: "CORE_AI",     label: "🤖 전사 AI 툴 업데이트 소식 (Cursor · Gemini · ChatGPT · Claude)", keywords: [] },
-  { key: "LIB_UPDATES", label: "📦 필수 라이브러리 릴리즈",                                keywords: [] },
-  { key: "TOP_PICKS",   label: "🌟 금주의 팝콘 픽 (기타 강추)",                             keywords: [] },
-  {
-    key: "PUBLISHING",
-    label: "✨ UI/UX 퍼블리싱 & 인터랙션",
-    keywords: [
-      "scss", "sass", "css", "html", "animation", "transition", "scroll",
-      "grid", "flexbox", "flex", "layout", "z-index", "selector", "selects",
-      "popover", "dialog", "clip-path", "mask", "shape", "view transition",
-      "container query", "cascade", "specificity", "has()", "corner-shape",
-      "scroll-driven", "web standard", "border",
-      "접근성", "a11y", "웹 표준", "마크업",
-      "인터랙션", "애니메이션", "반응형", "gsap",
-      "figma", "피그마", "devtools",
-      "core web vitals", "lighthouse", "performance"
-    ]
-  },
-  {
-    key: "GENERAL",
-    label: "🏢 IT 업계 실무 & 자동화 꿀팁",
-    keywords: [
-      "프론트엔드", "최적화", "javascript", "js", "생산성", "협업", "자동화", "n8n", "make", "typescript"
-    ]
-  },
-  { key: "YOUTUBE", label: "📺 주말에 몰아보는 코딩 유튜브", keywords: [] }
+// 코드 내장 "신뢰 소스" — 퍼블/프론트 전문 블로그. 관련성 게이트 면제 + 가점.
+// name으로 출처 라벨 고정(Smashing은 RSS author가 이메일이라 그대로 쓰면 지저분함).
+const FRONTEND_FEEDS = [
+  { url: "https://css-tricks.com/feed/",                     name: "CSS-Tricks" },
+  { url: "https://web.dev/static/blog/feed.xml",             name: "web.dev" },
+  { url: "https://www.smashingmagazine.com/feed/",           name: "Smashing Magazine" },
+  { url: "https://developer.mozilla.org/en-US/blog/rss.xml", name: "MDN" }
 ];
 
-// ==================== 메인 함수 ====================
+// 코드 내장 큐레이션 피드 — 인스타/Threads를 RSS.app 브릿지로 변환. 게이트 면제 + 가점 + 썸네일/캡션.
+const CURATED_FEEDS = [
+  { url: "https://rss.app/feeds/UiIcuXQVpXhNex46.xml", name: "ai.trend.kr" },
+  { url: "https://rss.app/feeds/s01IMm52zjqPpptl.xml", name: "ai.brief.kr" },
+  { url: "https://rss.app/feeds/4qdXYyjPMGidr6kd.xml", name: "바이브마피아" },
+  { url: "https://rss.app/feeds/0eVoqXItYWphq8Zp.xml", name: "AI Coffee Chat" }
+];
+
+// 매주 카드 하단에 고정 노출하는 링크 (전사 AI 툴 체인지로그 — 늘 챙겨봐야 하는 것)
+const PINNED_LINKS = [
+  { name: "Cursor 체인지로그", url: "https://cursor.com/ko/changelog" },
+  { name: "Claude 릴리스 노트", url: "https://support.claude.com/en/articles/12138966-release-notes" }
+];
+
+// 공통 제외 — 월페이퍼/만우절/컨퍼런스 홍보 등 명백한 비기술 잡글
+const EXCLUDE_TITLE_RE = /(wallpaper|월페이퍼|바탕화면|save the date|april.?fool|\bfools?\b|smashingconf|meet smashing|conference)/i;
+// rss.app이 끼워넣는 프로필 헤더 항목
+const PROFILE_NOISE_RE = /(•\s*Threads,?\s*Say more|^@[\w.]+\s*•)/i;
+
+// ==================== 트리거 셋업 (진입점) ====================
+
+/** 최초 1회 실행: 6시간 수집 + 월요일 13시 발송 트리거 생성 (기존 동일 트리거 제거 후 재생성) */
+function setupTriggers() {
+  clearTriggers();
+  ScriptApp.newTrigger("dailyCollect").timeBased().everyHours(6).create();
+  ScriptApp.newTrigger("mainDigest").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(13).create();
+  console.log("✅ 트리거 생성 완료 — dailyCollect(6시간마다), mainDigest(월 13시)");
+}
+
+function clearTriggers() {
+  ScriptApp.getProjectTriggers()
+    .filter((t) => ["dailyCollect", "mainDigest"].includes(t.getHandlerFunction()))
+    .forEach((t) => ScriptApp.deleteTrigger(t));
+}
+
+// ==================== 수집 대상 피드 ====================
+
+// main: techblogposts / trusted: 해외 퍼블 블로그(내장) /
+// curated: CURATED_FEEDS + EXTRA_FEEDS / firehose: FIREHOSE_FEEDS
+const getFeedList_ = (props) => {
+  const feeds = [{ url: SETTINGS.feedUrl, type: "main" }];
+  FRONTEND_FEEDS.forEach((f) => feeds.push({ url: f.url, type: "trusted", name: f.name }));
+  CURATED_FEEDS.forEach((f) => feeds.push({ url: f.url, type: "curated", name: f.name }));
+  parseExtraFeeds_(props.getProperty("EXTRA_FEEDS")).forEach((url) => feeds.push({ url, type: "curated" }));
+  parseExtraFeeds_(props.getProperty("FIREHOSE_FEEDS")).forEach((url) => feeds.push({ url, type: "firehose" }));
+  return feeds;
+};
+
+// ==================== 매일(6시간) 누적 수집 (진입점) ====================
+
+function dailyCollect() {
+  const props = PropertiesService.getScriptProperties();
+  const feeds = getFeedList_(props);
+
+  // 최근 풀 전체 링크로 중복 판정 (피드가 같은 글을 며칠간 반복 노출)
+  const seen = {};
+  recentPoolKeys_(props, SETTINGS.poolDays + 2)
+    .forEach((k) => safeParseArray_(props.getProperty(k)).forEach((e) => { seen[e.l] = true; }));
+
+  const todayKey = poolKeyFor_(new Date());
+  let today = safeParseArray_(props.getProperty(todayKey));
+  today.forEach((e) => { seen[e.l] = true; });
+
+  let added = 0;
+  feeds.forEach((feed) => {
+    try {
+      const xml = fetchFeedXml_(feed.url);
+      if (!xml) { console.log(`⚠️ 피드 로드 실패: ${feed.url}`); return; }
+      const parsed = parseFeed_(xml);
+
+      parsed.entries.slice(0, SETTINGS.perFeedLimit).forEach((e) => {
+        const link = normalizeLink_(e.link);
+        if (!link || !link.startsWith("http") || !e.title) return;
+        if (seen[link]) return;
+
+        const title = normalizeSpaces_(stripHtml_(e.title));
+        if (PROFILE_NOISE_RE.test(title)) return;             // rss.app 프로필 헤더
+        if (EXCLUDE_TITLE_RE.test(title)) return;             // 공통 잡글
+        if (feed.type === "firehose" && relevanceHits_(title) === 0) return; // firehose는 관련성 필수
+
+        seen[link] = true;
+        const item = {
+          t: trimTo_(title, SETTINGS.titleMaxLen),
+          l: link,
+          s: feed.name || e.source || cleanSource_(parsed.feedTitle) || (feed.type === "curated" ? "큐레이션" : "기술블로그"),
+          p: e.publishedAt ? e.publishedAt.toISOString() : ""
+        };
+        if (feed.type === "curated" || feed.type === "trusted") item.x = 1;       // 가점 대상
+        if (feed.type === "curated") {                                            // 카드뉴스: 썸네일
+          item.cu = 1;
+          if (e.image) item.img = e.image;
+        }
+        if (e.summary) item.sm = trimTo_(normalizeSpaces_(stripHtml_(e.summary)), 160); // 피드 요약(메인은 없음)
+        today.push(item);
+        added += 1;
+      });
+    } catch (err) {
+      console.log(`⚠️ 수집 오류(${feed.url}): ${err}`);
+    }
+  });
+
+  today = capStore_(today);                          // 발행일 최신순 정렬 + 건수·바이트 상한
+  props.setProperty(todayKey, JSON.stringify(today));
+  prunePool_(props, SETTINGS.poolDays + 2);
+  console.log(`✅ 수집 완료 — 신규 ${added}건, ${todayKey} 누적 ${today.length}건 (피드 ${feeds.length}개)`);
+}
+
+/** 발행일 최신순 정렬 후 건수·바이트 상한 적용 (한글 UTF-8 대비 Properties 9KB/값 보호) */
+const capStore_ = (items) => {
+  items.sort((a, b) => (b.p || "").localeCompare(a.p || ""));
+  let capped = items.slice(0, SETTINGS.maxStorePerDay);
+  while (capped.length > 1 && byteLen_(JSON.stringify(capped)) > SETTINGS.maxStoreBytes) {
+    capped = capped.slice(0, -1);
+  }
+  return capped;
+};
+
+// ==================== 메인 발송 (진입점) ====================
 
 function mainDigest() {
-  var webhookUrl = getWebhookUrl_();
+  const webhookUrl = getWebhookUrl_();
   if (!webhookUrl) throw new Error("WEBHOOK_URL이 설정되지 않았습니다.");
 
-  var allItems = collectItems_();
-  if (allItems.length === 0) {
-    sendSimpleText_(webhookUrl, "🍿 최근 새로운 소식이 없네요. 푹 쉬세요!");
+  const picks = selectPicks_();
+  if (!picks.length) {
+    sendSimpleText_(webhookUrl, "📬 이번 주는 모인 글이 없습니다. 다음 주에 다시 찾아뵙겠습니다.");
     return;
   }
-
-  var sorted = allItems.sort(function(a, b) { return b.score - a.score; });
-  var sourceCount = {};
-  var topPicks = [];
-
-  for (var i = 0; i < sorted.length; i++) {
-    var it = sorted[i];
-    if (it.category.key === "CORE_AI" || it.category.key === "LIB_UPDATES") continue;
-    if (topPicks.length >= 3) break;
-    if (!sourceCount[it.sourceName]) {
-      topPicks.push(it);
-      sourceCount[it.sourceName] = 1;
-    }
-  }
-
-  var topPickLinks = {};
-  topPicks.forEach(function(x) { topPickLinks[x.link] = true; });
-
-  var groupedSections = [];
-
-  for (var ci = 0; ci < CATEGORIES.length; ci++) {
-    var cat = CATEGORIES[ci];
-    if (cat.key === "TOP_PICKS") continue;
-
-    var pool = sorted.filter(function(it) {
-      return it.category.key === cat.key && !topPickLinks[it.link];
-    });
-    var chosen = [];
-    var catSourceCount = {};
-
-    for (var pi = 0; pi < pool.length; pi++) {
-      var item = pool[pi];
-      if (chosen.length >= SETTINGS.maxSendPerCategory) break;
-
-      if (cat.key === "CORE_AI") {
-        var cnt = catSourceCount[item.sourceName] || 0;
-        if (cnt >= 1) continue;
-        catSourceCount[item.sourceName] = cnt + 1;
-      } else if (cat.key !== "LIB_UPDATES") {
-        var cnt2 = sourceCount[item.sourceName] || 0;
-        if (cnt2 >= SETTINGS.maxPerSourceInDigest) continue;
-        sourceCount[item.sourceName] = cnt2 + 1;
-      }
-      chosen.push(item);
-    }
-
-    if (cat.key === "LIB_UPDATES") {
-      groupedSections.push({ category: cat, items: chosen });
-    } else if (chosen.length) {
-      groupedSections.push({ category: cat, items: chosen });
-    }
-  }
-
-  sendPopcornCard_(webhookUrl, topPicks, groupedSections);
+  enrichPicks_(picks);                  // 발송 5건만: 한글 번역 + 미리보기 정리
+  sendDigestCard_(webhookUrl, picks);
 }
 
-// ==================== 아이템 수집 ====================
+/** 누적 풀에서 점수순 → 출처 다양성 적용 → 상위 N건 */
+const selectPicks_ = () => {
+  const props = PropertiesService.getScriptProperties();
+  const now = new Date();
+  const cutoff = now.getTime() - SETTINGS.poolDays * 24 * 60 * 60 * 1000;
 
-function collectItems_() {
-  var items = [];
-  var seenTitles = {};
-  var now = new Date();
-  var props = PropertiesService.getScriptProperties();
-  YT_LOG = [];
+  const merged = {};
+  recentPoolKeys_(props, SETTINGS.poolDays)
+    .forEach((k) => safeParseArray_(props.getProperty(k)).forEach((e) => {
+      if (!merged[e.l]) merged[e.l] = e;            // 링크 기준 중복 제거
+    }));
 
-  var requests = SOURCES.map(function(s) {
-    return {
-      url: s.url,
-      muteHttpExceptions: true,
-      headers: s.kind === "youtube"
-        ? {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-            "Referer": "https://www.youtube.com/"
-          }
-        : { "User-Agent": SETTINGS.userAgent }
-    };
-  });
+  const items = Object.values(merged)
+    .map((e) => {
+      const publishedAt = parseDateSafe_(e.p);
+      return {
+        title: trimTo_(e.t, SETTINGS.titleMaxLen),
+        link: e.l,
+        sourceName: e.s,
+        image: e.img || "",
+        isCurated: !!e.cu,
+        storedSummary: e.sm || "",
+        publishedAt,
+        score: scoreItem_(e.t, publishedAt, now, !!e.x)
+      };
+    })
+    .filter((it) => !it.publishedAt || it.publishedAt.getTime() >= cutoff)
+    .sort((a, b) => (b.score - a.score) || (timeOf_(b.publishedAt) - timeOf_(a.publishedAt)));
 
-  var responses = UrlFetchApp.fetchAll(requests);
-  var cache = CacheService.getScriptCache();
-
-  for (var i = 0; i < SOURCES.length; i++) {
-    var source = SOURCES[i];
-    var cacheKey = source.kind === "youtube" ? "YT_FEED_" + source.name.replace(/\s/g, "_") : null;
-
-    try {
-      var res = responses[i];
-      var xml = null;
-
-      if (res && res.getResponseCode() < 400) {
-        var text = res.getContentText();
-        if (text.toLowerCase().indexOf("<!doctype html>") === -1 &&
-            text.toLowerCase().indexOf("<html") !== 0) {
-          xml = text;
-          if (cacheKey) {
-            try { cache.put(cacheKey, xml, 1123200); } catch(e) {}
-          }
-        }
-      }
-
-      if (!xml && cacheKey) {
-        var cached = cache.get(cacheKey);
-        if (cached) {
-          xml = cached;
-          YT_LOG.push({ name: source.name, passed: 0, blockedMust: [], blockedKw: [], blockedDate: 0, shorts: 0, failed: false, fromCache: true });
-        } else {
-          YT_LOG.push({ name: source.name, passed: 0, blockedMust: [], blockedKw: [], blockedDate: 0, shorts: 0, failed: true, code: res ? res.getResponseCode() : "no_response" });
-          continue;
-        }
-      } else if (!xml) {
-        continue;
-      }
-
-      xml = xml.replace(/&(?!(amp|apos|quot|lt|gt|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
-      xml = xml.replace(/<content:encoded[\s\S]*?<\/content:encoded>/gi, "<content:encoded></content:encoded>");
-      xml = xml.replace(/<hr>/gi, "<hr/>").replace(/<br>/gi, "<br/>");
-
-      var parsed = parseFeed_(xml, source);
-
-      if (source.kind === "library") {
-        var propKey = "LIB_VER_" + source.name.replace(/\s/g, "_");
-        var cachedLatest = props.getProperty(propKey) || "";
-        var latestEntry = parsed[0];
-        if (!latestEntry) continue;
-
-        var latestTitle = normalizeSpaces_(stripHtml_(latestEntry.title || ""));
-        if (latestTitle === cachedLatest) continue;
-
-        var libEntry = parsed[0];
-        if (!libEntry.link || libEntry.link.indexOf("http") !== 0) continue;
-        if (!libEntry.title) continue;
-
-        var libCleanTitle = normalizeSpaces_(stripHtml_(libEntry.title));
-        var libRawSummary = summarizeRelease_(libEntry.summary);
-        var libTranslated = libRawSummary;
-        if (libRawSummary.length > 5) {
-          try { libTranslated = LanguageApp.translate(libRawSummary, "en", "ko"); } catch(e) {}
-        }
-        items.push({
-          title: trimTo_(libCleanTitle, SETTINGS.titleMaxLen),
-          link: libEntry.link,
-          summary: libTranslated,
-          sourceName: source.name,
-          sourceKind: source.kind,
-          publishedAt: libEntry.publishedAt,
-          _propKey: propKey,
-          _propValue: latestTitle,
-          category: CATEGORIES.filter(function(c) { return c.key === "LIB_UPDATES"; })[0],
-          score: 100 + (libEntry.publishedAt ? Math.max(0, 30 - (now - libEntry.publishedAt) / (1000 * 60 * 60 * 24)) : 0)
-        });
-        continue;
-      }
-
-      var ytPassed = 0;
-      var ytBlockedMust = [];
-      var ytBlockedKw = [];
-      var ytBlockedDate = 0;
-      var ytShorts = 0;
-
-      var sliced = parsed.slice(0, SETTINGS.maxItemsPerSource);
-      for (var ei = 0; ei < sliced.length; ei++) {
-        var entry = sliced[ei];
-        if (!entry.link || entry.link.indexOf("http") !== 0) continue;
-        if (!entry.title) continue;
-
-        var cleanTitle = normalizeSpaces_(stripHtml_(entry.title));
-        var lowerTitle = cleanTitle.toLowerCase();
-
-        // Cursor Changelog, Google DeepMind는 2주 주기 → 14일 lookback 적용
-        var slowSources = ["Cursor Changelog", "Google DeepMind"];
-        var effectiveLookback = source.kind === "youtube"
-          ? SETTINGS.youtubeLookbackDays
-          : (slowSources.indexOf(source.name) !== -1 ? 14 : 7);
-
-        // Cursor Changelog 메인 페이지 항목 제거 (개별 버전 글 아님)
-        if (source.name === "Cursor Changelog" && lowerTitle.indexOf("changelog") !== -1 && lowerTitle.indexOf("cursor") !== -1 && cleanTitle.length < 25) {
-          continue;
-        }
-
-        if (entry.publishedAt && (now - entry.publishedAt) > effectiveLookback * 24 * 60 * 60 * 1000) {
-          if (source.kind === "youtube") ytBlockedDate++;
-          continue;
-        }
-
-        if (!entry.publishedAt && source.kind !== "library" && source.kind !== "youtube") {
-          continue;
-        }
-
-        if (EXCLUDE_KEYWORDS.some(function(kw) { return lowerTitle.indexOf(kw) !== -1; })) {
-          if (source.kind === "youtube") ytBlockedKw.push(cleanTitle);
-          continue;
-        }
-
-        if (DOMESTIC_SOURCES.indexOf(source.name) !== -1) {
-          if (DOMESTIC_BLOG_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
-        }
-
-        var isPublishingSource = PUBLISHING_SOURCES.indexOf(source.name) !== -1 ||
-                                 source.name === "Smashing Magazine";
-        if (isPublishingSource) {
-          if (PUBLISHING_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
-        }
-
-        // CSS Weekly / Frontend Focus: CSS 무관 글 차단
-        var isCssNewsletter = source.name === "CSS Weekly" || source.name === "Frontend Focus";
-        if (isCssNewsletter) {
-          var cssText = (cleanTitle + " " + (entry.summary || "")).toLowerCase();
-          var hasCssKeyword = ["css", "scss", "sass", "html", "animation", "layout",
-            "grid", "flexbox", "selector", "property", "variable", "transition",
-            "scroll", "typography", "web platform", "browser"].some(function(k) {
-            return cssText.indexOf(k) !== -1;
-          });
-          if (!hasCssKeyword) continue;
-        }
-
-        if (SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 ||
-            SETTINGS.coreAiSourceNames.indexOf(source.name) !== -1) {
-          // Cursor Changelog/Blog는 소스 자체가 Cursor 공식 → allowlist 체크 건너뜀
-          var isCursorSource = source.name === "Cursor Changelog" || source.name === "Cursor Blog";
-          if (!isCursorSource) {
-            var aiText = (cleanTitle + " " + (entry.summary || "")).toLowerCase();
-            var hasAllow = CORE_AI_ALLOW_KEYWORDS.some(function(k) { return aiText.indexOf(k) !== -1; });
-            if (!hasAllow) continue;
-          }
-          if (CORE_AI_BLOCK_PATTERNS.some(function(pat) { return pat.test(cleanTitle); })) continue;
-        }
-
-        if (source.kind === "youtube") {
-          if (entry.link.indexOf("/shorts/") !== -1) { ytShorts++; continue; }
-
-          var isBlocked = SETTINGS.youtubeBlockKeywords.some(function(k) { return lowerTitle.indexOf(k) !== -1; });
-          if (isBlocked) { ytBlockedKw.push(cleanTitle); continue; }
-
-          var hasMust = SETTINGS.youtubeMustKeywords.some(function(k) { return lowerTitle.indexOf(k) !== -1; });
-          if (!hasMust) { ytBlockedMust.push(cleanTitle); continue; }
-          ytPassed++;
-        }
-
-        var isChangelog = SETTINGS.cursorChangelogSources.indexOf(source.name) !== -1;
-        var isCursorBlog = SETTINGS.cursorBlogSources.indexOf(source.name) !== -1;
-        var isOtherAiSource = SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 && !isCursorBlog;
-
-        var summaryText = "";
-        if (isChangelog || isOtherAiSource) {
-          summaryText = summarizeRelease_(entry.summary);
-          if (!summaryText.trim()) {
-            var rawFallback = trimTo_(stripHtml_(entry.summary), SETTINGS.summaryMaxLen);
-            summaryText = rawFallback.length > 5
-              ? LanguageApp.translate(rawFallback, "", "ko")
-              : rawFallback;
-          } else if (summaryText.length > 5) {
-            try { summaryText = LanguageApp.translate(summaryText, "en", "ko"); } catch(e) {}
-          }
-        } else {
-          var rawSummary = trimTo_(stripHtml_(entry.summary), SETTINGS.summaryMaxLen);
-          if (rawSummary.length > 5) {
-            try { summaryText = LanguageApp.translate(rawSummary, "", "ko"); } catch(e) { summaryText = rawSummary; }
-          } else {
-            summaryText = rawSummary;
-          }
-        }
-
-        var newItem = {
-          title: trimTo_(cleanTitle, SETTINGS.titleMaxLen),
-          link: entry.link,
-          summary: summaryText,
-          sourceName: source.name,
-          sourceKind: source.kind,
-          publishedAt: entry.publishedAt,
-          _propKey: null,
-          _propValue: null,
-          category: null,
-          score: 0
-        };
-
-        newItem.category = classifyCategory_(newItem, source);
-
-        if (newItem.category && newItem.category.key === "GENERAL") {
-          var genText = (newItem.title + " " + newItem.summary).toLowerCase();
-          var isRelevant = GENERAL_RELEVANCE_KEYWORDS.some(function(k) { return genText.indexOf(k) !== -1; });
-          if (!isRelevant) continue;
-        }
-
-        if (newItem.category) {
-          var titleKey = newItem.title.trim().toLowerCase();
-          if (!seenTitles[titleKey]) {
-            seenTitles[titleKey] = true;
-            newItem.score = scoreItem_(newItem, source, now);
-            items.push(newItem);
-          }
-        }
-      }
-
-      if (source.kind === "youtube") {
-        YT_LOG.push({
-          name: source.name,
-          passed: ytPassed,
-          blockedMust: ytBlockedMust,
-          blockedKw: ytBlockedKw,
-          blockedDate: ytBlockedDate,
-          shorts: ytShorts
-        });
-      }
-
-    } catch(e) {
-      console.log("[" + source.name + "] 오류: " + e);
-    }
+  const picks = [];
+  const perSource = {};
+  for (const it of items) {
+    if (picks.length >= SETTINGS.maxSend) break;
+    const cnt = perSource[it.sourceName] || 0;
+    if (cnt >= SETTINGS.maxPerSource) continue;
+    perSource[it.sourceName] = cnt + 1;
+    picks.push(it);
   }
+  return picks;
+};
 
-  return items;
-}
-
-// ==================== 분류 로직 ====================
-
-function classifyCategory_(item, source) {
-  var text = (item.title + " " + item.summary).toLowerCase();
-
-  if (SETTINGS.coreAiSourceKinds.indexOf(source.kind) !== -1 ||
-      SETTINGS.coreAiSourceNames.indexOf(source.name) !== -1) {
-    return CATEGORIES.filter(function(c) { return c.key === "CORE_AI"; })[0];
-  }
-
-  if (source.kind === "library") {
-    return CATEGORIES.filter(function(c) { return c.key === "LIB_UPDATES"; })[0];
-  }
-
-  if (PUBLISHING_SOURCES.indexOf(source.name) !== -1) {
-    return CATEGORIES.filter(function(c) { return c.key === "PUBLISHING"; })[0];
-  }
-
-  if (source.kind === "youtube") {
-    return CATEGORIES.filter(function(c) { return c.key === "YOUTUBE"; })[0];
-  }
-
-  var skipKeys = ["TOP_PICKS", "CORE_AI", "LIB_UPDATES", "YOUTUBE"];
-  for (var i = 0; i < CATEGORIES.length; i++) {
-    var cat = CATEGORIES[i];
-    if (skipKeys.indexOf(cat.key) !== -1) continue;
-    if (cat.keywords && cat.keywords.some(function(k) { return text.indexOf(k) !== -1; })) {
-      return cat;
-    }
-  }
-
-  return CATEGORIES.filter(function(c) { return c.key === "GENERAL"; })[0];
-}
-
-// ==================== 점수 계산 ====================
-
-function scoreItem_(item, source, now) {
-  var score = 0;
-  var text = (item.title + " " + item.summary).toLowerCase();
-
-  if (item.category.key === "CORE_AI" || item.category.key === "LIB_UPDATES") score += 100;
-
-  if (item.publishedAt) {
-    var daysOld = (now - item.publishedAt) / (1000 * 60 * 60 * 24);
-    score += Math.max(0, 30 - daysOld);
-  }
-
-  var highValueKeywords = ["scss", "sass", "figma", "n8n", "make", "자동화", "접근성", "a11y", "반응형", "core web vitals", "web standard", "view transition", "container query"];
-  score += highValueKeywords.filter(function(k) { return text.indexOf(k) !== -1; }).length * 15;
-
-  if (source.kind === "youtube") score += 10;
-
-  if (PUBLISHING_SOURCES.indexOf(source.name) !== -1) score += 20;
-
-  // ← 변경: Cursor Changelog 제거, Claude Code Changelog 추가
-  var cursorSources = ["Cursor Blog", "Cursor Changelog", "Claude Code Changelog"];
-  if (cursorSources.indexOf(source.name) !== -1) score += 40;
-
-  // Figma Blog 보너스
-  if (source.name === "Figma Blog") score += 20;
-
-  // CSS Weekly, Frontend Focus 퍼블팀 특화 보너스
-  var cssSpecialSources = ["CSS Weekly", "Frontend Focus"];
-  if (cssSpecialSources.indexOf(source.name) !== -1) score += 10;
-
+/** 신선도(≤30) + CORE×coreWeight + AUX×auxWeight − NEG×negWeight + 큐레이션/신뢰 가점 */
+const scoreItem_ = (title, publishedAt, now, isExtra) => {
+  const lower = String(title || "").toLowerCase();
+  let score = freshnessScore_(publishedAt, now);
+  score += countHits_(CORE_KEYWORDS, lower) * SETTINGS.coreWeight;
+  score += countHits_(AUX_KEYWORDS, lower) * SETTINGS.auxWeight;
+  score -= countHits_(NEG_KEYWORDS, lower) * SETTINGS.negWeight;
+  if (isExtra) score += SETTINGS.extraFeedBonus;
   return score;
-}
+};
 
-// ==================== UI 렌더링 ====================
+const freshnessScore_ = (publishedAt, now) =>
+  publishedAt ? Math.max(0, 30 - (now.getTime() - publishedAt.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
-function sendPopcornCard_(webhookUrl, topPicks, sections) {
-  var props = PropertiesService.getScriptProperties();
-  var dateStr = Utilities.formatDate(new Date(), "Asia/Seoul", "MM/dd");
-  var widgets = [];
+/** firehose 통과 판정 — CORE/AUX 통틀어 키워드가 하나라도 있으면 통과 */
+const relevanceHits_ = (title) => {
+  const lower = String(title || "").toLowerCase();
+  return countHits_(CORE_KEYWORDS, lower) + countHits_(AUX_KEYWORDS, lower);
+};
 
-  widgets.push({
+const countHits_ = (keywords, lower) => keywords.filter((k) => lower.includes(k)).length;
+
+/**
+ * 발송 직전 5건에만 적용: 한글 번역 + 미리보기 정리.
+ *   - 미리보기는 수집 때 피드에서 저장한 요약(sm). 해외 블로그·Threads는 있고,
+ *     techblogposts 메인(미리디 등 Medium 글)은 피드가 요약을 주지 않아 제목만 표시됨.
+ *   - 영문 제목·미리보기는 한국어로 번역(이미 한국어면 그대로).
+ */
+const enrichPicks_ = (picks) => {
+  picks.forEach((it) => {
+    it.title = maybeTranslate_(it.title);
+    it.summary = maybeTranslate_(trimTo_(normalizeSpaces_(stripHtml_(it.storedSummary)), SETTINGS.summaryMaxLen));
+  });
+};
+
+// ==================== 카드 렌더링 ====================
+
+const sendDigestCard_ = (webhookUrl, picks) => {
+  const dateStr = Utilities.formatDate(new Date(), "Asia/Seoul", "MM/dd");
+  const trackerBase = getTrackerBaseUrl_();
+
+  const widgets = [{
     decoratedText: {
-      text: "<b>☕ 나른한 월요일 오후, 팝콘처럼 톡톡 튀는 IT 소식!</b><br/><font color=\"#5f6368\">월요병을 이겨낼 우리 팀 필수 스택 업데이트를 정리해 왔어요.</font>",
+      text: `<font color="#5f6368">이번 주 읽어볼 만한 글 ${picks.length}편을 정리했습니다.</font>`,
       wrapText: true
     }
-  });
+  }];
+  picks.forEach((it) => makeItemWidgets_(it, dateStr, trackerBase).forEach((w) => widgets.push(w)));
 
-  var coreSections = sections.filter(function(sec) {
-    return sec.category.key === "CORE_AI" || sec.category.key === "LIB_UPDATES";
-  });
-
-  coreSections.forEach(function(sec) {
-    widgets.push({ divider: {} });
-    widgets.push({ decoratedText: { text: "<b>" + sec.category.label + "</b>", wrapText: true } });
-
-    if (sec.category.key === "LIB_UPDATES" && sec.items.length === 0) {
-      var allProps = PropertiesService.getScriptProperties().getProperties();
-      var libSources = SOURCES.filter(function(s) { return s.kind === "library"; });
-      widgets.push({
-        decoratedText: {
-          text: "<font color=\"#34a853\">✅ 이번 주 새 릴리즈 없음 — 최신 버전이에요.</font>",
-          wrapText: true
-        }
-      });
-      libSources.forEach(function(src) {
-        var verKey = "LIB_VER_" + src.name.replace(/\s/g, "_");
-        var ver = allProps[verKey] || "버전 정보 없음";
-        var releaseUrl = src.releasePageUrl || src.url;
-        widgets.push({
-          decoratedText: {
-            topLabel: src.name,
-            text: "<font color=\"#444\">" + ver + "</font>",
-            wrapText: true,
-            button: { text: "릴리즈 보기", onClick: { openLink: { url: releaseUrl } } }
-          }
-        });
-      });
-    } else {
-      sec.items.forEach(function(it) {
-        makeItemWidgets_(it, dateStr).forEach(function(w) { widgets.push(w); });
-      });
+  // 하단 고정 링크 (전사 AI 툴 체인지로그)
+  widgets.push({ divider: {} });
+  widgets.push({ decoratedText: { text: "<b>🔧 전사 AI 툴 업데이트 (매주 고정)</b>", wrapText: true } });
+  widgets.push({
+    buttonList: {
+      buttons: PINNED_LINKS.map((p) => ({ text: p.name, onClick: { openLink: { url: p.url } } }))
     }
   });
 
-  if (topPicks && topPicks.length) {
-    widgets.push({ divider: {} });
-    widgets.push({ decoratedText: { text: "<b>🌟 금주의 팝콘 픽 (기타 강추)</b>", wrapText: true } });
-    topPicks.forEach(function(it) {
-      makeItemWidgets_(it, dateStr).forEach(function(w) { widgets.push(w); });
-    });
-  }
-
-  // 이번 주 Tip 섹션 (Script Properties에 값이 있을 때만 표시)
-  var tipTitle = PropertiesService.getScriptProperties().getProperty("WEEKLY_TIP_TITLE") || "";
-  var tipUrl   = PropertiesService.getScriptProperties().getProperty("WEEKLY_TIP_URL")   || "";
-  var tipDesc  = PropertiesService.getScriptProperties().getProperty("WEEKLY_TIP_DESC")  || "";
-
-  if (tipTitle && tipUrl) {
-    var tipLinkUrl = tipUrl;
-    if (SETTINGS.trackerBaseUrl) {
-      tipLinkUrl = SETTINGS.trackerBaseUrl +
-        "?url="     + encodeURIComponent(tipUrl) +
-        "&section=" + encodeURIComponent("이번 주 Tip") +
-        "&source="  + encodeURIComponent("Tip of the Week") +
-        "&title="   + encodeURIComponent(tipTitle) +
-        "&sent="    + encodeURIComponent(dateStr);
-    }
-    widgets.push({ divider: {} });
-    widgets.push({ decoratedText: { text: "<b>💡 이번 주 바로 써먹기</b>", wrapText: true } });
-    widgets.push({
-      decoratedText: {
-        topLabel: "Tip of the Week",
-        text: "<b>" + escapeHtml_(tipTitle) + "</b>" + (tipDesc ? "<br/><font color=\"#808080\">" + escapeHtml_(tipDesc) + "</font>" : ""),
-        wrapText: true
-      }
-    });
-    widgets.push({ buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: tipLinkUrl } } }] } });
-  }
-
-  var otherSections = sections.filter(function(sec) {
-    return sec.category.key !== "CORE_AI" && sec.category.key !== "LIB_UPDATES";
-  });
-
-  otherSections.forEach(function(sec) {
-    widgets.push({ divider: {} });
-    widgets.push({ decoratedText: { text: "<b>" + sec.category.label + "</b>", wrapText: true } });
-    sec.items.forEach(function(it) {
-      makeItemWidgets_(it, dateStr).forEach(function(w) { widgets.push(w); });
-    });
-  });
-
-  var payload = {
+  const payload = {
     cardsV2: [{
-      cardId: "weeklyPopcornDigest",
+      cardId: "weeklyTechLetter",
       card: {
         header: {
-          title: "🍿 이번 주 뭐볼까?",
-          subtitle: dateStr + " · 월요병 극복 큐레이션",
+          title: "🍿 위클리 테크레터",
+          subtitle: `${dateStr} · 퍼블팀`,
           imageType: "CIRCLE",
           imageUrl: "https://fonts.gstatic.com/s/i/googlematerialicons/movie_filter/v15/24px.svg"
         },
-        sections: [{ widgets: widgets }]
+        sections: [{ widgets }]
       }
     }]
   };
-
   UrlFetchApp.fetch(webhookUrl, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify(payload)
   });
+};
 
-  sections.forEach(function(sec) {
-    if (sec.category.key === "LIB_UPDATES") {
-      sec.items.forEach(function(it) {
-        if (it._propKey && it._propValue) props.setProperty(it._propKey, it._propValue);
-      });
-    }
-  });
-}
+/** 한 아이템 → 카드 위젯 배열 (구분선 + 제목/미리보기 + 썸네일 + 버튼) */
+const makeItemWidgets_ = (it, dateStr, trackerBase) => {
+  const pubStr = it.publishedAt ? Utilities.formatDate(it.publishedAt, "Asia/Seoul", "MM/dd") : "";
+  const topLabel = it.sourceName + (pubStr ? ` · ${pubStr}` : "");
+  const linkUrl = buildTrackerUrl_(it, dateStr, trackerBase);
 
-function makeItemWidgets_(it, sentDateStr) {
-  var dateStr = it.publishedAt ? Utilities.formatDate(it.publishedAt, "Asia/Seoul", "MM/dd") : "";
-  var topLabel = it.sourceName + (dateStr ? " · " + dateStr : "");
-  var summaryFormatted = it.summary.replace(/\n/g, "<br/>");
-  var summaryLine = summaryFormatted ? "<br/><font color=\"#808080\">" + summaryFormatted + "</font>" : "";
+  let body = `<b>${escapeHtml_(it.title)}</b>`;
+  if (it.summary) body += `<br/><font color="#5f6368">${escapeHtml_(it.summary)}</font>`;
 
-  // 트래커 URL 생성
-  var linkUrl = it.link;
-  var trackerBase = SETTINGS.trackerBaseUrl;
-  if (trackerBase) {
-    linkUrl = trackerBase +
-      "?url="     + encodeURIComponent(it.link) +
-      "&section=" + encodeURIComponent(it.category ? it.category.label : "") +
-      "&source="  + encodeURIComponent(it.sourceName) +
-      "&title="   + encodeURIComponent(it.title) +
-      "&sent="    + encodeURIComponent(sentDateStr || "");
-  }
-
-  return [
-    { decoratedText: { topLabel: topLabel, text: "<b>" + escapeHtml_(it.title) + "</b>" + summaryLine, wrapText: true } },
-    { buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: linkUrl } } }] } }
+  const widgets = [
+    { divider: {} },
+    { decoratedText: { topLabel, text: body, wrapText: true } }
   ];
-}
+  if (it.image) {
+    widgets.push({ image: { imageUrl: it.image, altText: it.title, onClick: { openLink: { url: linkUrl } } } });
+  }
+  widgets.push({ buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: linkUrl } } }] } });
+  return widgets;
+};
 
-// ==================== 디버그 함수 ====================
+/** 트래커 설정 시 클릭 추적 URL, 아니면 원본 링크 */
+const buildTrackerUrl_ = (it, dateStr, trackerBase) => {
+  if (!trackerBase) return it.link;
+  const q = [
+    ["url", it.link], ["source", it.sourceName], ["title", it.title], ["sent", dateStr]
+  ].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+  return `${trackerBase}?${q}`;
+};
 
+// ==================== 디버그 / 유지보수 (진입점) ====================
+
+/** 현재 누적 풀과 이번 주 선별 결과를 콘솔에 출력 (발송·번역 없음) */
 function debugDigest() {
-  var allItems = collectItems_();
-  var summary = {};
+  const props = PropertiesService.getScriptProperties();
+  const keys = recentPoolKeys_(props, SETTINGS.poolDays + 2).sort();
 
-  allItems.forEach(function(item) {
-    var key = item.category ? item.category.label : "미분류";
-    if (!summary[key]) summary[key] = [];
-    summary[key].push("[" + item.sourceName + "] " + item.title);
+  console.log("=== 📦 누적 풀 현황 ===");
+  let total = 0;
+  keys.forEach((k) => {
+    const n = safeParseArray_(props.getProperty(k)).length;
+    total += n;
+    console.log(`  ${k}: ${n}건`);
   });
+  console.log(`  (합계 ${total}건)\n`);
 
-  console.log("=== 총 수집 아이템 수:", allItems.length, "===\n");
-
-  Object.keys(summary).forEach(function(cat) {
-    console.log("▶ " + cat + " (" + summary[cat].length + "개)");
-    summary[cat].forEach(function(t) { console.log("  -", t); });
-    console.log("");
+  const picks = selectPicks_();
+  console.log(`=== 🌟 이번 주 선별 ${picks.length}건 ===`);
+  picks.forEach((it, i) => {
+    const d = it.publishedAt ? Utilities.formatDate(it.publishedAt, "Asia/Seoul", "MM/dd") : "-";
+    console.log(`  ${i + 1}. [${it.sourceName} · ${d}] ${it.title} (score ${Math.round(it.score)})`);
   });
+}
 
-  console.log("=== 📺 유튜브 필터링 진단 ===");
-  if (YT_LOG.length === 0) {
-    console.log("  (유튜브 채널 데이터 없음 — 피드 로드 실패 가능성)");
+/** 누적 풀 전체 초기화 (테스트용) */
+function resetPool() {
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(props.getProperties())
+    .filter((k) => k.startsWith("POOL_"))
+    .forEach((k) => props.deleteProperty(k));
+  console.log("✅ 누적 풀 초기화 완료");
+}
+
+// ==================== 풀 저장 유틸 ====================
+
+const poolKeyFor_ = (date) => `POOL_${Utilities.formatDate(date, "Asia/Seoul", "yyyy-MM-dd")}`;
+
+const poolKeyDate_ = (key) => parseDateSafe_(`${key.slice(5)}T00:00:00+09:00`);
+
+const recentPoolKeys_ = (props, withinDays) => {
+  const cutoff = new Date().getTime() - withinDays * 24 * 60 * 60 * 1000;
+  return Object.keys(props.getProperties()).filter((k) => {
+    if (!k.startsWith("POOL_")) return false;
+    const d = poolKeyDate_(k);
+    return d && d.getTime() >= cutoff;
+  });
+};
+
+const prunePool_ = (props, keepDays) => {
+  const cutoff = new Date().getTime() - keepDays * 24 * 60 * 60 * 1000;
+  Object.keys(props.getProperties()).forEach((k) => {
+    if (!k.startsWith("POOL_")) return;
+    const d = poolKeyDate_(k);
+    if (d && d.getTime() < cutoff) props.deleteProperty(k);
+  });
+};
+
+const safeParseArray_ = (s) => {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : [];
+  } catch (e) {
+    return [];
   }
-  YT_LOG.forEach(function(ch) {
-    if (ch.failed) {
-      console.log("  ❌ [" + ch.name + "] 피드 로드 실패 (code: " + ch.code + ") — 캐시도 없음");
-    } else if (ch.fromCache && ch.passed === 0 && ch.blockedMust.length === 0) {
-      console.log("  💾 [" + ch.name + "] 캐시 폴백 사용 중 (실시간 피드 실패)");
-    } else {
-      console.log(
-        "  ✅ [" + ch.name + "]" +
-        " 통과: " + ch.passed + "개" +
-        " | MUST미충족: " + ch.blockedMust.length +
-        " | BLOCK차단: " + ch.blockedKw.length +
-        " | 날짜초과: " + ch.blockedDate +
-        " | Shorts: " + ch.shorts +
-        (ch.fromCache ? " 💾캐시" : "")
-      );
-      ch.blockedMust.slice(0, 3).forEach(function(t) { console.log("    ❌ MUST미충족: " + t); });
-      ch.blockedKw.slice(0, 3).forEach(function(t) { console.log("    ⛔ BLOCK차단: " + t); });
-    }
-  });
+};
 
-  var libItems = allItems.filter(function(i) { return i.category && i.category.key === "LIB_UPDATES"; });
-  console.log("\n=== 📦 라이브러리 아이템:", libItems.length, "개 ===");
-  if (libItems.length === 0) {
-    console.log("ℹ️ 이번 주 라이브러리 신규 릴리즈 없음");
-  } else {
-    libItems.forEach(function(it) {
-      console.log("  - [" + it.sourceName + "] " + it.title + " (score: " + it.score + ")");
-    });
-  }
+/** Medium 등의 ?source= 추적 파라미터 제거 (가독성·중복판정 개선) */
+const normalizeLink_ = (link) => {
+  const l = String(link || "").trim();
+  const idx = l.indexOf("?source=");
+  return idx !== -1 ? l.slice(0, idx) : l;
+};
 
-  var allProps = PropertiesService.getScriptProperties().getProperties();
-  console.log("\n=== 📌 저장된 라이브러리 버전 캐시 ===");
-  Object.keys(allProps)
-    .filter(function(k) { return k.indexOf("LIB_VER_") === 0; })
-    .forEach(function(k) { console.log("  " + k + ": " + allProps[k]); });
-}
+/** rss.app Threads 피드 제목의 지저분한 꼬리표 정리 (`... • Threads, Say more` 등) */
+const cleanSource_ = (s) =>
+  normalizeSpaces_(String(s || "").replace(/•\s*Threads.*$/i, "").replace(/\(@[\w.]+\)/, ""));
 
-function resetLibVersionCache() {
-  var props = PropertiesService.getScriptProperties();
-  var all = props.getProperties();
-  Object.keys(all)
-    .filter(function(k) { return k.indexOf("LIB_VER_") === 0; })
-    .forEach(function(k) { props.deleteProperty(k); });
-  console.log("✅ 라이브러리 버전 캐시를 초기화했습니다.");
-}
+/** EXTRA_FEEDS/FIREHOSE_FEEDS 문자열(줄바꿈/쉼표 구분)을 URL 배열로 파싱 */
+const parseExtraFeeds_ = (raw) =>
+  String(raw || "").split(/[\n,]+/).map((s) => s.trim()).filter((s) => s.startsWith("http"));
 
-function seedLibVersionCache() {
-  var props = PropertiesService.getScriptProperties();
-  var libSources = SOURCES.filter(function(s) { return s.kind === "library"; });
+// ==================== 피드 파싱 ====================
 
-  libSources.forEach(function(source) {
-    try {
-      var xml = fetchAndSanitizeXml_(source.url);
-      if (!xml) { console.log("[" + source.name + "] 피드 가져오기 실패"); return; }
-      var parsed = parseFeed_(xml, source);
-      if (!parsed.length) return;
-      var latestTitle = normalizeSpaces_(stripHtml_(parsed[0].title || ""));
-      var propKey = "LIB_VER_" + source.name.replace(/\s/g, "_");
-      props.setProperty(propKey, latestTitle);
-      console.log("✅ [" + source.name + "] 캐시 저장: \"" + latestTitle + "\"");
-    } catch(e) {
-      console.log("[" + source.name + "] 오류: " + e);
-    }
-  });
-
-  console.log("\n📌 seedLibVersionCache 완료! debugDigest()를 다시 실행해보세요.");
-}
-
-// ==================== 공통 유틸 ====================
-
-function fetchAndSanitizeXml_(url) {
-  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { "User-Agent": SETTINGS.userAgent } });
+const fetchFeedXml_ = (url) => {
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { "User-Agent": SETTINGS.userAgent } });
   if (res.getResponseCode() >= 400) return null;
-  var xml = res.getContentText();
-  if (xml.toLowerCase().indexOf("<!doctype html>") !== -1 || xml.toLowerCase().indexOf("<html") === 0) return null;
-  xml = xml.replace(/&(?!(amp|apos|quot|lt|gt|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
-  xml = xml.replace(/<content:encoded[\s\S]*?<\/content:encoded>/gi, "<content:encoded></content:encoded>");
-  return xml.replace(/<hr>/gi, "<hr/>").replace(/<br>/gi, "<br/>");
-}
+  const xml = res.getContentText();
+  const lower = xml.toLowerCase();
+  if (lower.indexOf("<!doctype html>") !== -1 || lower.indexOf("<html") === 0) return null;
+  return xml.replace(/&(?!(amp|apos|quot|lt|gt|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+};
 
-function parseFeed_(xml, source) {
-  var doc = XmlService.parse(xml);
-  var root = doc.getRootElement();
-  var channel = root.getChild("channel");
+/** RSS/Atom 피드 파싱. { feedTitle, entries } 반환. */
+const parseFeed_ = (xml) => {
+  const root = XmlService.parse(xml).getRootElement();
+  const ns = root.getNamespace();
+  const mediaNs = XmlService.getNamespace("http://search.yahoo.com/mrss/");
+  const contentNs = XmlService.getNamespace("http://purl.org/rss/1.0/modules/content/");
 
+  // RSS (<channel><item>)
+  const channel = root.getChild("channel");
   if (channel) {
-    return channel.getChildren("item").map(function(item) {
-      return {
-        title: item.getChildText("title") || "",
-        link: (item.getChildText("link") || "").trim(),
-        summary: item.getChildText("description") || item.getChildText("summary") || "",
-        publishedAt: parseDateSafe_(item.getChildText("pubDate") || item.getChildText("date"))
-      };
-    });
+    const entries = channel.getChildren("item").map((item) => ({
+      title: item.getChildText("title") || "",
+      link: (item.getChildText("link") || "").trim(),
+      source: item.getChildText("author") || item.getChildText("creator") || "",
+      summary: item.getChildText("description") || item.getChildText("encoded", contentNs) || "",
+      image: extractImage_(item, null, mediaNs),
+      publishedAt: parseDateSafe_(item.getChildText("pubDate") || item.getChildText("date"))
+    }));
+    return { feedTitle: normalizeSpaces_(stripHtml_(channel.getChildText("title") || "")), entries };
   }
 
-  var ns = root.getNamespace();
-  return (root.getChildren("entry", ns) || []).map(function(entry) {
-    var link = "";
-    var links = entry.getChildren("link", ns) || [];
-    for (var i = 0; i < links.length; i++) {
-      var l = links[i];
-      if (l.getAttribute("href") &&
-          (!l.getAttribute("rel") || l.getAttribute("rel").getValue() === "alternate")) {
-        link = l.getAttribute("href").getValue();
-        break;
-      }
-    }
-    if (!link && links.length) link = links[0].getAttribute("href").getValue();
-
+  // Atom (<feed><entry>)
+  const entries = (root.getChildren("entry", ns) || []).map((entry) => {
+    const author = entry.getChild("author", ns);
     return {
       title: entry.getChildText("title", ns) || "",
-      link: link,
+      link: atomLink_(entry, ns),
+      source: author ? (author.getChildText("name", ns) || "") : "",
       summary: entry.getChildText("summary", ns) || entry.getChildText("content", ns) || "",
+      image: extractImage_(entry, ns, mediaNs),
       publishedAt: parseDateSafe_(entry.getChildText("published", ns) || entry.getChildText("updated", ns))
     };
   });
-}
+  return { feedTitle: normalizeSpaces_(stripHtml_(root.getChildText("title", ns) || "")), entries };
+};
 
-function summarizeRelease_(raw) {
-  var cleaned = normalizeSpaces_(stripHtml_(raw || ""))
-    .replace(/\(#\d+\)/g, "")
-    .replace(/\b[0-9a-f]{7,40}\b/gi, "")
-    .trim();
-  var chunks = cleaned.split(/[\n•\-]\s+/).map(function(x) { return x.trim(); }).filter(Boolean);
-  var picked = chunks.filter(function(x) {
-    return /(security|bug|fix|crash|breaking|feature|new|add|improve)/i.test(x);
-  });
-  return (picked.length ? picked : chunks).slice(0, 3).map(function(x) {
-    return "- " + trimTo_(x, 80);
-  }).join("\n");
-}
+/** Atom <entry>에서 대표 링크(href) 추출 — rel=alternate 우선 */
+const atomLink_ = (entry, ns) => {
+  const links = entry.getChildren("link", ns) || [];
+  for (const l of links) {
+    const href = l.getAttribute("href");
+    const rel = l.getAttribute("rel");
+    if (href && (!rel || rel.getValue() === "alternate")) return href.getValue().trim();
+  }
+  const first = links[0] && links[0].getAttribute("href");
+  return first ? first.getValue().trim() : "";
+};
 
-function getWebhookUrl_() {
-  return PropertiesService.getScriptProperties().getProperty("WEBHOOK_URL") || "";
-}
+/** 항목에서 이미지 URL 추출 (media:content / media:thumbnail / enclosure). 없으면 "" */
+const extractImage_ = (el, atomNs, mediaNs) => {
+  try {
+    for (const c of (el.getChildren("content", mediaNs) || [])) {
+      const url = c.getAttribute("url");
+      const medium = c.getAttribute("medium");
+      const type = c.getAttribute("type");
+      if (url && (!medium || medium.getValue() === "image") && (!type || type.getValue().startsWith("image"))) {
+        return url.getValue();
+      }
+    }
+    const thumb = el.getChild("thumbnail", mediaNs);
+    if (thumb && thumb.getAttribute("url")) return thumb.getAttribute("url").getValue();
 
-function sendSimpleText_(url, text) {
-  UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({ text: text })
-  });
-}
+    if (atomNs) {
+      for (const l of (el.getChildren("link", atomNs) || [])) {
+        const rel = l.getAttribute("rel");
+        const type = l.getAttribute("type");
+        const href = l.getAttribute("href");
+        if (href && rel && rel.getValue() === "enclosure" && (!type || type.getValue().startsWith("image"))) {
+          return href.getValue();
+        }
+      }
+    } else {
+      const enc = el.getChild("enclosure");
+      const type = enc && enc.getAttribute("type");
+      if (enc && enc.getAttribute("url") && (!type || type.getValue().startsWith("image"))) {
+        return enc.getAttribute("url").getValue();
+      }
+    }
+  } catch (e) { /* 네임스페이스 없는 피드 등은 무시 */ }
+  return "";
+};
 
-function parseDateSafe_(s) {
+// ==================== 공통 유틸 ====================
+
+const getWebhookUrl_ = () => PropertiesService.getScriptProperties().getProperty("WEBHOOK_URL") || "";
+const getTrackerBaseUrl_ = () => PropertiesService.getScriptProperties().getProperty("TRACKER_BASE_URL") || "";
+
+const sendSimpleText_ = (url, text) => {
+  UrlFetchApp.fetch(url, { method: "post", contentType: "application/json", payload: JSON.stringify({ text }) });
+};
+
+/** 영문이면 한국어로 번역, 이미 한국어면 그대로 (실패 시 원문 유지) */
+const maybeTranslate_ = (text) => {
+  const t = String(text || "").trim();
+  if (!t || /[가-힣]/.test(t)) return t;        // 비었거나 이미 한국어
+  try {
+    return LanguageApp.translate(t, "en", "ko");
+  } catch (e) {
+    return t;
+  }
+};
+
+const byteLen_ = (s) => Utilities.newBlob(String(s || "")).getBytes().length;
+const timeOf_ = (date) => (date ? date.getTime() : 0);
+
+const parseDateSafe_ = (s) => {
   if (!s) return null;
-  var d = new Date(s);
+  const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
-}
+};
 
-function stripHtml_(s) {
-  return String(s || "").replace(/<[^>]*>/g, " ");
-}
-
-function normalizeSpaces_(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
-}
-
-function trimTo_(s, maxLen) {
-  var str = String(s || "");
-  return str.length <= maxLen ? str : str.slice(0, Math.max(0, maxLen - 1)) + "…";
-}
-
-function escapeHtml_(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+const stripHtml_ = (s) => String(s || "").replace(/<[^>]*>/g, " ");
+const normalizeSpaces_ = (s) => String(s || "").replace(/\s+/g, " ").trim();
+const trimTo_ = (s, maxLen) => {
+  const str = String(s || "");
+  return str.length <= maxLen ? str : `${str.slice(0, Math.max(0, maxLen - 1))}…`;
+};
+const escapeHtml_ = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
