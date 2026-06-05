@@ -1,4 +1,4 @@
-# 🍿 위클리 테크레터 (퍼블팀 주간 큐레이션 봇)
+# 🍿 IT TREND NEWS (퍼블팀 주간 큐레이션 봇)
 
 Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/퍼블리싱 팀에게 이번 주 읽어볼 만한 국내 기술 글을 골라 배달하는 **큐레이션 봇**입니다.
 
@@ -52,10 +52,11 @@ Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/
 
 각 항목은 **제목 · 출처 · 발행일 · 2줄 미리보기 · [보러가기] 버튼**으로 구성됩니다. 발송 직전 5건에만 다음을 적용합니다(가볍고 빠름).
 
--   **미리보기:** 피드가 제공하는 요약을 2줄로 표시. 해외 블로그(CSS-Tricks·Smashing·MDN)와 Threads는 요약이 있어 미리보기가 나오고, **techblogposts 메인(미리디 등 Medium 글 다수)은 피드가 요약을 주지 않아 제목만** 표시됩니다(Medium은 스크래핑도 차단).
+-   **미리보기:** 피드가 제공하는 요약을 2줄로 표시. Medium 글(미리디 등 techblogposts)은 피드에 본문이 없어, **퍼블리케이션 피드(`medium.com/feed/<pub>`)에서 본문을 받아** 미리보기를 만듭니다(`enrichMediumBodies_`).
+-   **본문 기반 React 감지:** 제목엔 안 드러나도 본문에 React 생태계 신호(react·useState·서버컴포넌트 등)가 있으면 NEG로 감점해 가라앉힙니다. (예: "DOM Reflow…60fps"는 React 글 → 하위로)
 -   **한글 번역:** 영문 제목·미리보기는 `LanguageApp`으로 한국어 번역(이미 한국어면 그대로). 전체가 아닌 발송 5건만 번역해 비용이 적습니다.
 -   **썸네일:** 큐레이션(인스타/Threads)에 이미지가 있으면 함께 노출.
--   **하단 고정 링크:** 카드 맨 아래에 **Cursor 체인지로그 · Claude 릴리스 노트**를 매주 고정 노출(전사 AI 툴 — 늘 챙겨봐야 하는 것). `PINNED_LINKS`에서 수정합니다.
+-   **상단 고정 링크:** 카드 **맨 위**에 **Cursor · Claude · GSAP · Swiper** 체인지로그를 한 줄 인라인 링크로 노출(전사 AI 툴 + 핵심 인터랙션 라이브러리). `PINNED_LINKS`에서 수정합니다.
 
 ### 6. 소스 4타입
 
@@ -73,26 +74,11 @@ Google Apps Script(GAS)와 Google Chat Webhook을 활용하여, 프론트엔드/
 > - **Threads**: 공개 프로필이라 더 안정적이고, 본문이 텍스트라 캡션이 온전히 들어옴. 같은 계정이면 **Threads 권장**.
 > - **GeekNews**: `https://news.hada.io/rss/news` (Atom). 전 분야라 `FIREHOSE_FEEDS`에 넣어 노이즈를 거릅니다.
 
-#### 큐레이션 대상 계정 (브릿지 피드로 추가 예정)
-
-각 계정을 RSS.app 등에서 피드로 변환해 `EXTRA_FEEDS`에 넣습니다. **Threads가 있으면 Threads 우선**(본문 텍스트가 온전히 수집됨).
-
-| 계정          | Threads                         | Instagram                          | 비고            |
-| ------------- | ------------------------------- | ---------------------------------- | --------------- |
-| ai.brief.kr   | `@ai.brief.kr` (공개)           | `instagram.com/ai.brief.kr`        | AI 브리핑       |
-| ai.trend.kr   | `@ai.trend.kr` (공개)           | `instagram.com/ai.trend.kr`        | AI 트렌드       |
-| ai_freaks.kr  | —                               | `instagram.com/ai_freaks.kr`       | AI              |
-| design.yodi   | —                               | `instagram.com/design.yodi`        | 디자인(카드뉴스) |
-
 ### 7. 썸네일 이미지
 
 피드 항목에 이미지(`enclosure`/`media:content`/`media:thumbnail`)가 있으면 Google Chat 카드에 썸네일을 함께 노출합니다. (카드뉴스 훑어보기에 유용. 없으면 텍스트만)
 
-### 8. 클릭 트래킹 (선택)
-
-별도 GAS 웹앱(`tracker.gs`)을 배포하고 `TRACKER_BASE_URL`을 지정하면 링크 클릭 수를 집계할 수 있습니다. 개편 효과(팀 참여도)를 측정하는 용도로 활용하세요.
-
-### 9. 철저한 보안 관리
+### 8. 철저한 보안 관리
 
 Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties` 환경 변수를 사용하여 외부 노출을 차단합니다.
 
@@ -136,19 +122,11 @@ Webhook URL을 하드코딩하지 않고, GAS의 `Script Properties` 환경 변�
 3. 알림을 받을 Google Chat 스페이스에서 **[웹후크 관리]**를 통해 URL을 발급받습니다.
 4. GAS 에디터 좌측 톱니바퀴(프로젝트 설정) > **[스크립트 속성]**에 추가합니다.
     - **속성:** `WEBHOOK_URL` / **값:** 발급받은 웹후크 주소 (필수)
-    - **속성:** `TRACKER_BASE_URL` / **값:** tracker.gs 배포 후 발급받은 웹앱 URL (선택)
     - **속성:** `EXTRA_FEEDS` / **값:** 큐레이션 피드 URL — 인스타/Threads 브릿지 (줄바꿈·쉼표 구분, 선택)
     - **속성:** `FIREHOSE_FEEDS` / **값:** 전 분야 피드 URL — 예: `https://news.hada.io/rss/news` (선택)
 5. **최초 1회** `setupTriggers()` 함수를 수동 실행합니다.
     - `dailyCollect`(6시간마다) + `mainDigest`(월요일 13시) 트리거가 자동 생성됩니다.
     - 며칠간 풀이 쌓인 뒤 첫 발송이 가장 풍성합니다. 바로 테스트하려면 `dailyCollect()`를 몇 번 수동 실행한 뒤 `debugDigest()`로 확인하세요.
-
-### tracker.gs 세팅 (선택)
-
-1. GAS에서 **새 프로젝트** 별도 생성 후 `tracker.gs` 코드를 붙여넣습니다.
-2. Script Properties에 `WEBHOOK_URL` 추가 (chatbot과 동일한 주소).
-3. 배포 → 새 배포 → 웹 앱 (실행 계정: 나, 액세스 권한: 모든 사용자).
-4. 배포된 웹앱 URL을 chatbot.gs Script Properties의 `TRACKER_BASE_URL`에 입력합니다.
 
 ### 디버그 & 유지보수 함수
 

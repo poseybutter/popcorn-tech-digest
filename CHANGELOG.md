@@ -2,7 +2,7 @@
 
 ## v3.0 (2026-06-05) — 전면 재개편 · 리브랜딩 · 팀 스택 맞춤
 
-기존 다중 RSS + 방대한 차단 패턴 구조를 폐기하고, 국내 139개 기술블로그를 집계하는 **TechBlogPosts 통합 피드**를 메인으로 일원화했습니다. 이름도 `🍿 Popcorn Tech Digest` → **`🍿 위클리 테크레터`**로 바꾸고, 대상 팀(HTML·CSS·SCSS·JS·jQuery 퍼블, 공공기관 유지보수)에 맞춰 선별 기준을 재설계했습니다. 코드도 모던 스타일로 리팩토링(973줄 → 약 590줄).
+기존 다중 RSS + 방대한 차단 패턴 구조를 폐기하고, 국내 139개 기술블로그를 집계하는 **TechBlogPosts 통합 피드**를 메인으로 일원화했습니다. 이름도 `🍿 Popcorn Tech Digest` → **`🍿 IT TREND NEWS`**로 바꾸고, 대상 팀(HTML·CSS·SCSS·JS·jQuery 퍼블, 공공기관 유지보수)에 맞춰 선별 기준을 재설계했습니다. 코드도 모던 스타일로 리팩토링(973줄 → 약 590줄).
 
 ### 소스 (4타입)
 
@@ -17,15 +17,19 @@
 -   **CORE** — 퍼블 핵심(HTML·CSS·SCSS·JS·jQuery) + **인터랙션(GSAP·Swiper·애니메이션·스크롤)** + **웹접근성·웹표준** + **KRDS·디자인시스템** + 레이아웃·성능
 -   **AUX** — **AI 활용·트렌드·생산성·AI 보안 취약점** + **백엔드 인지(Java·Spring·PHP)** + **형상관리(Git·SVN)**
 -   **NEG** — React·Vue·Svelte·Angular·Next.js 등 모던 SPA(현재 불필요) 감점
+-   **메인 피드 CORE 게이트:** techblogposts는 백엔드/인프라 글이 많아, 제목에 퍼블(CORE) 키워드가 0개면 수집 제외(예: "Amazon EKS Physical AI 워크플로")
+-   **React 본문 글 제외:** Medium 본문에서 React 신호가 `negDropThreshold`(기본 2) 이상이면 발송 제외(강등 아님). 제목만 퍼블처럼 보이는 React 글(예: "DOM Reflow…60fps") 차단. 콘텐츠가 적은 주엔 5건 미만 발송 가능(억지 채움 방지)
 
 ### 카드 / 수집
 
--   **하단 고정 링크:** Cursor 체인지로그 · Claude 릴리스 노트를 매주 카드 하단에 항상 노출(`PINNED_LINKS`)
--   **2줄 미리보기 + 한글 번역(발송 5건 한정):** 피드 요약을 2줄 노출, 영문 제목·미리보기는 `LanguageApp`으로 번역(한국어면 그대로). techblogposts 메인은 피드에 요약이 없어 제목만(Medium 스크래핑 차단)
+-   **상단 고정 링크:** Cursor · Claude · GSAP · Swiper 체인지로그를 카드 **맨 위**에 한 줄 인라인 링크로 노출(`PINNED_LINKS`)
+-   **2줄 미리보기 + 한글 번역(발송 5건 한정):** 피드 요약을 2줄 노출, 영문 제목·미리보기는 `LanguageApp`으로 번역(한국어면 그대로)
+-   **Medium 본문 보강(`enrichMediumBodies_`):** techblogposts 메인의 Medium 글은 피드에 본문이 없으므로 퍼블리케이션 피드(`medium.com/feed/<pub>`)에서 본문을 받아 ① 미리보기 생성 ② **본문 기반 React 감지**. 제목엔 안 드러나도 본문에 React 신호(react·useState·서버컴포넌트 등)가 있으면 NEG 감점으로 가라앉힘(예: "DOM Reflow…60fps" 같은 React 글 75→30점)
 -   **썸네일:** 큐레이션(인스타/Threads) 항목에 이미지가 있으면 노출
 -   **6시간 누적 수집(`dailyCollect`):** 최신 10건 한계 보완, 링크 기준 중복 제거 후 일자별 풀(`POOL_<날짜>`) 누적, 9일 경과 자동 정리
 -   **수집 안정화:** 피드당 최신 12건 제한, 발행일 최신순 + **바이트 기준 저장 상한**(한글 UTF-8 대비 9KB/값 보호), `?source=` 추적 파라미터 제거, rss.app 프로필 헤더·잡글(`EXCLUDE_TITLE_RE`) 제거
 -   **`setupTriggers()`** — `dailyCollect`(6시간) + `mainDigest`(월 13시) 트리거 자동 생성
+-   **전송 안정화:** 유효한 `https` 이미지만 렌더(잘못된 URL이 카드 전체를 깨뜨리는 것 방지), Chat 전송 실패 시 응답 코드·본문 로깅
 
 ### 코드
 

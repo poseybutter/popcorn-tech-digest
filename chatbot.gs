@@ -1,5 +1,5 @@
 /**
- * 🍿 위클리 테크레터 (퍼블팀 주간 큐레이션 봇) — v3.0
+ * 🍿 IT TREND NEWS (퍼블팀 주간 큐레이션 봇) — v3.0
  *
  * 메인 소스: TechBlogPosts 통합 피드(국내 139개 기술블로그 집계, 한국어).
  *   - 피드가 "최신 10건"만 주므로 6시간마다 누적 수집(dailyCollect)
@@ -33,6 +33,7 @@ const SETTINGS = {
   coreWeight: 25,        // CORE 매치당 가점 (팀 핵심)
   auxWeight: 10,         // AUX 매치당 가점 (보조)
   negWeight: 15,         // NEG 매치당 감점 (현재 불필요 주제)
+  negDropThreshold: 2,   // 본문 NEG(React 등) 매치가 이 수 이상이면 발송 제외(강등 아님)
   extraFeedBonus: 20,    // 신뢰/큐레이션 소스 가점
 
   perFeedLimit: 12,      // 피드당 1회 수집 상한 (콜드스타트 백로그 방지)
@@ -81,10 +82,13 @@ const AUX_KEYWORDS = [
   "코드", "코딩", "개발자", "리팩토링", "cli", "sdk"
 ];
 
-// NEG = 현재 팀에 불필요한 주제 (모던 SPA 프레임워크) — 감점해서 가라앉힘
+// NEG = 현재 팀에 불필요한 주제 (모던 SPA 프레임워크) — 감점해서 가라앉힘.
+// 제목엔 안 드러나도 본문에서 잡히도록 React 생태계 신호어를 포함(본문 기반 감지).
 const NEG_KEYWORDS = [
   "react", "리액트", "vue", "vue.js", "svelte", "스벨트", "angular", "앵귤러",
-  "next.js", "nextjs", "nuxt", "solidjs", "remix"
+  "next.js", "nextjs", "nuxt", "solidjs", "remix",
+  "jsx", "usestate", "useeffect", "usememo", "usecallback", "useref",
+  "리렌더", "virtual dom", "가상 dom", "server component", "서버 컴포넌트", "use client"
 ];
 
 // 코드 내장 "신뢰 소스" — 퍼블/프론트 전문 블로그. 관련성 게이트 면제 + 가점.
@@ -104,10 +108,13 @@ const CURATED_FEEDS = [
   { url: "https://rss.app/feeds/0eVoqXItYWphq8Zp.xml", name: "AI Coffee Chat" }
 ];
 
-// 매주 카드 하단에 고정 노출하는 링크 (전사 AI 툴 체인지로그 — 늘 챙겨봐야 하는 것)
+// 매주 카드 맨 위에 고정 노출하는 링크 (전사 AI 툴 + 핵심 인터랙션 라이브러리 — 늘 챙겨봐야 하는 것)
+// 인라인 텍스트 링크로 렌더해 4개가 한 줄에 들어가도록 라벨은 짧게.
 const PINNED_LINKS = [
-  { name: "Cursor 체인지로그", url: "https://cursor.com/ko/changelog" },
-  { name: "Claude 릴리스 노트", url: "https://support.claude.com/en/articles/12138966-release-notes" }
+  { name: "Cursor", url: "https://cursor.com/ko/changelog" },
+  { name: "Claude", url: "https://support.claude.com/en/articles/12138966-release-notes" },
+  { name: "GSAP", url: "https://gsap.com/blog/archive/" },
+  { name: "Swiper", url: "https://swiperjs.com/changelog" }
 ];
 
 // 공통 제외 — 월페이퍼/만우절/컨퍼런스 홍보 등 명백한 비기술 잡글
@@ -144,6 +151,47 @@ const getFeedList_ = (props) => {
   return feeds;
 };
 
+// ==================== Medium 본문 보강 ====================
+// techblogposts 메인의 Medium 글은 피드에 본문이 없음 → 퍼블리케이션 피드(medium.com/feed/<pub>)에서
+// 본문을 받아 ① 미리보기(sm) ② React 등 감지(ng)를 채운다. 처리한 항목은 _enr로 표시해 재요청 방지.
+
+const mediumPub_ = (link) => {
+  const m = String(link).match(/:\/\/medium\.com\/(@?[^/?#]+)/);
+  return m ? m[1] : "";
+};
+
+const fetchMediumPubBodies_ = (pub) => {
+  const map = {};
+  try {
+    const xml = fetchFeedXml_(`https://medium.com/feed/${pub}`);
+    if (xml) {
+      parseFeed_(xml).entries.forEach((e) => {
+        const link = normalizeLink_(e.link);
+        if (link) map[link] = e.body || e.summary || "";
+      });
+    }
+  } catch (x) { /* 실패 시 빈 맵 → 제목만으로 진행 */ }
+  return map;
+};
+
+const enrichMediumBodies_ = (items) => {
+  const targets = items.filter((e) => !e._enr && /:\/\/medium\.com\//.test(e.l));
+  if (!targets.length) return;
+  const cache = {};
+  targets.forEach((e) => {
+    e._enr = 1;
+    const pub = mediumPub_(e.l);
+    if (!pub) return;
+    if (!(pub in cache)) cache[pub] = fetchMediumPubBodies_(pub);
+    const body = cache[pub][e.l];
+    if (!body) return;
+    const text = stripHtml_(body);
+    if (!e.sm) e.sm = trimTo_(normalizeSpaces_(text), 160);
+    const ng = countHits_(NEG_KEYWORDS, `${e.t} ${text}`.toLowerCase());
+    if (ng) e.ng = ng; else delete e.ng;
+  });
+};
+
 // ==================== 매일(6시간) 누적 수집 (진입점) ====================
 
 function dailyCollect() {
@@ -175,6 +223,8 @@ function dailyCollect() {
         if (PROFILE_NOISE_RE.test(title)) return;             // rss.app 프로필 헤더
         if (EXCLUDE_TITLE_RE.test(title)) return;             // 공통 잡글
         if (feed.type === "firehose" && relevanceHits_(title) === 0) return; // firehose는 관련성 필수
+        // 메인(techblogposts)은 백엔드/인프라 글이 많음 → 퍼블(CORE) 키워드가 1개도 없으면 제외
+        if (feed.type === "main" && countHits_(CORE_KEYWORDS, title.toLowerCase()) === 0) return;
 
         seen[link] = true;
         const item = {
@@ -189,6 +239,8 @@ function dailyCollect() {
           if (e.image) item.img = e.image;
         }
         if (e.summary) item.sm = trimTo_(normalizeSpaces_(stripHtml_(e.summary)), 160); // 피드 요약(메인은 없음)
+        const ng = countHits_(NEG_KEYWORDS, `${title} ${stripHtml_(e.summary || "")}`.toLowerCase());
+        if (ng) item.ng = ng;                  // React 등 감지 수(본문 보강 전, 제목+요약 기준)
         today.push(item);
         added += 1;
       });
@@ -197,6 +249,7 @@ function dailyCollect() {
     }
   });
 
+  enrichMediumBodies_(today);                        // Medium 글 본문으로 미리보기·React 감지 보강
   today = capStore_(today);                          // 발행일 최신순 정렬 + 건수·바이트 상한
   props.setProperty(todayKey, JSON.stringify(today));
   prunePool_(props, SETTINGS.poolDays + 2);
@@ -241,6 +294,7 @@ const selectPicks_ = () => {
     }));
 
   const items = Object.values(merged)
+    .filter((e) => (e.ng || 0) < SETTINGS.negDropThreshold)   // React 등 본문 NEG 과다 → 제외
     .map((e) => {
       const publishedAt = parseDateSafe_(e.p);
       return {
@@ -251,7 +305,7 @@ const selectPicks_ = () => {
         isCurated: !!e.cu,
         storedSummary: e.sm || "",
         publishedAt,
-        score: scoreItem_(e.t, publishedAt, now, !!e.x)
+        score: scoreItem_(e.t, e.ng, publishedAt, now, !!e.x)
       };
     })
     .filter((it) => !it.publishedAt || it.publishedAt.getTime() >= cutoff)
@@ -269,13 +323,17 @@ const selectPicks_ = () => {
   return picks;
 };
 
-/** 신선도(≤30) + CORE×coreWeight + AUX×auxWeight − NEG×negWeight + 큐레이션/신뢰 가점 */
-const scoreItem_ = (title, publishedAt, now, isExtra) => {
+/**
+ * 신선도(≤30) + CORE×coreWeight + AUX×auxWeight − NEG×negWeight + 큐레이션/신뢰 가점.
+ * ng(수집 때 본문/요약으로 미리 센 NEG 수)가 있으면 그 값을, 없으면 제목 기준 NEG를 사용.
+ */
+const scoreItem_ = (title, ng, publishedAt, now, isExtra) => {
   const lower = String(title || "").toLowerCase();
   let score = freshnessScore_(publishedAt, now);
   score += countHits_(CORE_KEYWORDS, lower) * SETTINGS.coreWeight;
   score += countHits_(AUX_KEYWORDS, lower) * SETTINGS.auxWeight;
-  score -= countHits_(NEG_KEYWORDS, lower) * SETTINGS.negWeight;
+  const negHits = (ng != null) ? ng : countHits_(NEG_KEYWORDS, lower);
+  score -= negHits * SETTINGS.negWeight;
   if (isExtra) score += SETTINGS.extraFeedBonus;
   return score;
 };
@@ -310,29 +368,33 @@ const sendDigestCard_ = (webhookUrl, picks) => {
   const dateStr = Utilities.formatDate(new Date(), "Asia/Seoul", "MM/dd");
   const trackerBase = getTrackerBaseUrl_();
 
-  const widgets = [{
+  const widgets = [];
+
+  // 맨 위 고정 링크 — 인라인 텍스트 링크로 4개를 한 줄에 (버튼은 폰트 크기 조절 불가)
+  const pinnedLinks = PINNED_LINKS.map((p) => `<a href="${p.url}">${p.name}</a>`).join("&nbsp;&nbsp;·&nbsp;&nbsp;");
+  widgets.push({
+    decoratedText: {
+      text: `<b>🔧 주요 툴·라이브러리 업데이트</b><br/>${pinnedLinks}`,
+      wrapText: true
+    }
+  });
+
+  // 이번 주 글
+  widgets.push({ divider: {} });
+  widgets.push({
     decoratedText: {
       text: `<font color="#5f6368">이번 주 읽어볼 만한 글 ${picks.length}편을 정리했습니다.</font>`,
       wrapText: true
     }
-  }];
-  picks.forEach((it) => makeItemWidgets_(it, dateStr, trackerBase).forEach((w) => widgets.push(w)));
-
-  // 하단 고정 링크 (전사 AI 툴 체인지로그)
-  widgets.push({ divider: {} });
-  widgets.push({ decoratedText: { text: "<b>🔧 전사 AI 툴 업데이트 (매주 고정)</b>", wrapText: true } });
-  widgets.push({
-    buttonList: {
-      buttons: PINNED_LINKS.map((p) => ({ text: p.name, onClick: { openLink: { url: p.url } } }))
-    }
   });
+  picks.forEach((it) => makeItemWidgets_(it, dateStr, trackerBase).forEach((w) => widgets.push(w)));
 
   const payload = {
     cardsV2: [{
       cardId: "weeklyTechLetter",
       card: {
         header: {
-          title: "🍿 위클리 테크레터",
+          title: "🍿 IT TREND NEWS",
           subtitle: `${dateStr} · 퍼블팀`,
           imageType: "CIRCLE",
           imageUrl: "https://fonts.gstatic.com/s/i/googlematerialicons/movie_filter/v15/24px.svg"
@@ -341,11 +403,15 @@ const sendDigestCard_ = (webhookUrl, picks) => {
       }
     }]
   };
-  UrlFetchApp.fetch(webhookUrl, {
+  const res = UrlFetchApp.fetch(webhookUrl, {
     method: "post",
     contentType: "application/json",
-    payload: JSON.stringify(payload)
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
   });
+  if (res.getResponseCode() >= 300) {
+    console.log(`⚠️ Chat 전송 실패 (${res.getResponseCode()}): ${res.getContentText()}`);
+  }
 };
 
 /** 한 아이템 → 카드 위젯 배열 (구분선 + 제목/미리보기 + 썸네일 + 버튼) */
@@ -361,7 +427,7 @@ const makeItemWidgets_ = (it, dateStr, trackerBase) => {
     { divider: {} },
     { decoratedText: { topLabel, text: body, wrapText: true } }
   ];
-  if (it.image) {
+  if (/^https:\/\//.test(it.image)) {   // 유효한 https 이미지만 (잘못된 URL은 카드 전체를 깨뜨림)
     widgets.push({ image: { imageUrl: it.image, altText: it.title, onClick: { openLink: { url: linkUrl } } } });
   }
   widgets.push({ buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: linkUrl } } }] } });
@@ -485,6 +551,7 @@ const parseFeed_ = (xml) => {
       link: (item.getChildText("link") || "").trim(),
       source: item.getChildText("author") || item.getChildText("creator") || "",
       summary: item.getChildText("description") || item.getChildText("encoded", contentNs) || "",
+      body: item.getChildText("encoded", contentNs) || item.getChildText("description") || "",
       image: extractImage_(item, null, mediaNs),
       publishedAt: parseDateSafe_(item.getChildText("pubDate") || item.getChildText("date"))
     }));
@@ -499,6 +566,7 @@ const parseFeed_ = (xml) => {
       link: atomLink_(entry, ns),
       source: author ? (author.getChildText("name", ns) || "") : "",
       summary: entry.getChildText("summary", ns) || entry.getChildText("content", ns) || "",
+      body: entry.getChildText("content", ns) || entry.getChildText("summary", ns) || "",
       image: extractImage_(entry, ns, mediaNs),
       publishedAt: parseDateSafe_(entry.getChildText("published", ns) || entry.getChildText("updated", ns))
     };
