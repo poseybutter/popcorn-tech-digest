@@ -1,5 +1,5 @@
 /**
- * 🍿 IT TREND NEWS (퍼블팀 주간 큐레이션 봇) — v3.0
+ * 🍿 IT TREND NEWS (퍼블팀 주간 큐레이션 봇) — v3.1
  *
  * 메인 소스: TechBlogPosts 통합 피드(국내 139개 기술블로그 집계, 한국어).
  *   - 피드가 "최신 10건"만 주므로 6시간마다 누적 수집(dailyCollect)
@@ -13,7 +13,7 @@
  *       + 큐레이션/신뢰 소스 가점.
  *
  * 최초 1회: setupTriggers() 실행 → 6시간 수집 + 월요일 발송 트리거 자동 생성.
- * Script Properties: WEBHOOK_URL(필수), TRACKER_BASE_URL·EXTRA_FEEDS·FIREHOSE_FEEDS(선택).
+ * Script Properties: WEBHOOK_URL(필수), EXTRA_FEEDS·FIREHOSE_FEEDS(선택).
  * 자세한 이력은 README.md / CHANGELOG.md 참고.
  *
  * 참고: GAS 트리거·에디터 Run이 인식하도록 진입점은 function 선언, 내부 헬퍼는 화살표 함수.
@@ -92,7 +92,6 @@ const NEG_KEYWORDS = [
 ];
 
 // 코드 내장 "신뢰 소스" — 퍼블/프론트 전문 블로그. 관련성 게이트 면제 + 가점.
-// name으로 출처 라벨 고정(Smashing은 RSS author가 이메일이라 그대로 쓰면 지저분함).
 const FRONTEND_FEEDS = [
   { url: "https://css-tricks.com/feed/",                     name: "CSS-Tricks" },
   { url: "https://web.dev/static/blog/feed.xml",             name: "web.dev" },
@@ -108,8 +107,7 @@ const CURATED_FEEDS = [
   { url: "https://rss.app/feeds/0eVoqXItYWphq8Zp.xml", name: "AI Coffee Chat" }
 ];
 
-// 매주 카드 맨 위에 고정 노출하는 링크 (전사 AI 툴 + 핵심 인터랙션 라이브러리 — 늘 챙겨봐야 하는 것)
-// 인라인 텍스트 링크로 렌더해 4개가 한 줄에 들어가도록 라벨은 짧게.
+// 매주 카드 맨 위에 고정 노출하는 링크 (전사 AI 툴 + 핵심 인터랙션 라이브러리)
 const PINNED_LINKS = [
   { name: "Cursor", url: "https://cursor.com/ko/changelog" },
   { name: "Claude", url: "https://support.claude.com/en/articles/12138966-release-notes" },
@@ -140,8 +138,6 @@ function clearTriggers() {
 
 // ==================== 수집 대상 피드 ====================
 
-// main: techblogposts / trusted: 해외 퍼블 블로그(내장) /
-// curated: CURATED_FEEDS + EXTRA_FEEDS / firehose: FIREHOSE_FEEDS
 const getFeedList_ = (props) => {
   const feeds = [{ url: SETTINGS.feedUrl, type: "main" }];
   FRONTEND_FEEDS.forEach((f) => feeds.push({ url: f.url, type: "trusted", name: f.name }));
@@ -152,8 +148,6 @@ const getFeedList_ = (props) => {
 };
 
 // ==================== Medium 본문 보강 ====================
-// techblogposts 메인의 Medium 글은 피드에 본문이 없음 → 퍼블리케이션 피드(medium.com/feed/<pub>)에서
-// 본문을 받아 ① 미리보기(sm) ② React 등 감지(ng)를 채운다. 처리한 항목은 _enr로 표시해 재요청 방지.
 
 const mediumPub_ = (link) => {
   const m = String(link).match(/:\/\/medium\.com\/(@?[^/?#]+)/);
@@ -198,7 +192,6 @@ function dailyCollect() {
   const props = PropertiesService.getScriptProperties();
   const feeds = getFeedList_(props);
 
-  // 최근 풀 전체 링크로 중복 판정 (피드가 같은 글을 며칠간 반복 노출)
   const seen = {};
   recentPoolKeys_(props, SETTINGS.poolDays + 2)
     .forEach((k) => safeParseArray_(props.getProperty(k)).forEach((e) => { seen[e.l] = true; }));
@@ -220,10 +213,9 @@ function dailyCollect() {
         if (seen[link]) return;
 
         const title = normalizeSpaces_(stripHtml_(e.title));
-        if (PROFILE_NOISE_RE.test(title)) return;             // rss.app 프로필 헤더
-        if (EXCLUDE_TITLE_RE.test(title)) return;             // 공통 잡글
-        if (feed.type === "firehose" && relevanceHits_(title) === 0) return; // firehose는 관련성 필수
-        // 메인(techblogposts)은 백엔드/인프라 글이 많음 → 퍼블(CORE) 키워드가 1개도 없으면 제외
+        if (PROFILE_NOISE_RE.test(title)) return;
+        if (EXCLUDE_TITLE_RE.test(title)) return;
+        if (feed.type === "firehose" && relevanceHits_(title) === 0) return;
         if (feed.type === "main" && countHits_(CORE_KEYWORDS, title.toLowerCase()) === 0) return;
 
         seen[link] = true;
@@ -233,14 +225,14 @@ function dailyCollect() {
           s: feed.name || e.source || cleanSource_(parsed.feedTitle) || (feed.type === "curated" ? "큐레이션" : "기술블로그"),
           p: e.publishedAt ? e.publishedAt.toISOString() : ""
         };
-        if (feed.type === "curated" || feed.type === "trusted") item.x = 1;       // 가점 대상
-        if (feed.type === "curated") {                                            // 카드뉴스: 썸네일
+        if (feed.type === "curated" || feed.type === "trusted") item.x = 1;
+        if (feed.type === "curated") {
           item.cu = 1;
           if (e.image) item.img = e.image;
         }
-        if (e.summary) item.sm = trimTo_(normalizeSpaces_(stripHtml_(e.summary)), 160); // 피드 요약(메인은 없음)
+        if (e.summary) item.sm = trimTo_(normalizeSpaces_(stripHtml_(e.summary)), 160);
         const ng = countHits_(NEG_KEYWORDS, `${title} ${stripHtml_(e.summary || "")}`.toLowerCase());
-        if (ng) item.ng = ng;                  // React 등 감지 수(본문 보강 전, 제목+요약 기준)
+        if (ng) item.ng = ng;
         today.push(item);
         added += 1;
       });
@@ -249,14 +241,13 @@ function dailyCollect() {
     }
   });
 
-  enrichMediumBodies_(today);                        // Medium 글 본문으로 미리보기·React 감지 보강
-  today = capStore_(today);                          // 발행일 최신순 정렬 + 건수·바이트 상한
+  enrichMediumBodies_(today);
+  today = capStore_(today);
   props.setProperty(todayKey, JSON.stringify(today));
   prunePool_(props, SETTINGS.poolDays + 2);
   console.log(`✅ 수집 완료 — 신규 ${added}건, ${todayKey} 누적 ${today.length}건 (피드 ${feeds.length}개)`);
 }
 
-/** 발행일 최신순 정렬 후 건수·바이트 상한 적용 (한글 UTF-8 대비 Properties 9KB/값 보호) */
 const capStore_ = (items) => {
   items.sort((a, b) => (b.p || "").localeCompare(a.p || ""));
   let capped = items.slice(0, SETTINGS.maxStorePerDay);
@@ -277,11 +268,10 @@ function mainDigest() {
     sendSimpleText_(webhookUrl, "📬 이번 주는 모인 글이 없습니다. 다음 주에 다시 찾아뵙겠습니다.");
     return;
   }
-  enrichPicks_(picks);                  // 발송 5건만: 한글 번역 + 미리보기 정리
+  enrichPicks_(picks);
   sendDigestCard_(webhookUrl, picks);
 }
 
-/** 누적 풀에서 점수순 → 출처 다양성 적용 → 상위 N건 */
 const selectPicks_ = () => {
   const props = PropertiesService.getScriptProperties();
   const now = new Date();
@@ -290,11 +280,11 @@ const selectPicks_ = () => {
   const merged = {};
   recentPoolKeys_(props, SETTINGS.poolDays)
     .forEach((k) => safeParseArray_(props.getProperty(k)).forEach((e) => {
-      if (!merged[e.l]) merged[e.l] = e;            // 링크 기준 중복 제거
+      if (!merged[e.l]) merged[e.l] = e;
     }));
 
   const items = Object.values(merged)
-    .filter((e) => (e.ng || 0) < SETTINGS.negDropThreshold)   // React 등 본문 NEG 과다 → 제외
+    .filter((e) => (e.ng || 0) < SETTINGS.negDropThreshold)
     .map((e) => {
       const publishedAt = parseDateSafe_(e.p);
       return {
@@ -323,10 +313,6 @@ const selectPicks_ = () => {
   return picks;
 };
 
-/**
- * 신선도(≤30) + CORE×coreWeight + AUX×auxWeight − NEG×negWeight + 큐레이션/신뢰 가점.
- * ng(수집 때 본문/요약으로 미리 센 NEG 수)가 있으면 그 값을, 없으면 제목 기준 NEG를 사용.
- */
 const scoreItem_ = (title, ng, publishedAt, now, isExtra) => {
   const lower = String(title || "").toLowerCase();
   let score = freshnessScore_(publishedAt, now);
@@ -341,7 +327,6 @@ const scoreItem_ = (title, ng, publishedAt, now, isExtra) => {
 const freshnessScore_ = (publishedAt, now) =>
   publishedAt ? Math.max(0, 30 - (now.getTime() - publishedAt.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
-/** firehose 통과 판정 — CORE/AUX 통틀어 키워드가 하나라도 있으면 통과 */
 const relevanceHits_ = (title) => {
   const lower = String(title || "").toLowerCase();
   return countHits_(CORE_KEYWORDS, lower) + countHits_(AUX_KEYWORDS, lower);
@@ -349,12 +334,6 @@ const relevanceHits_ = (title) => {
 
 const countHits_ = (keywords, lower) => keywords.filter((k) => lower.includes(k)).length;
 
-/**
- * 발송 직전 5건에만 적용: 한글 번역 + 미리보기 정리.
- *   - 미리보기는 수집 때 피드에서 저장한 요약(sm). 해외 블로그·Threads는 있고,
- *     techblogposts 메인(미리디 등 Medium 글)은 피드가 요약을 주지 않아 제목만 표시됨.
- *   - 영문 제목·미리보기는 한국어로 번역(이미 한국어면 그대로).
- */
 const enrichPicks_ = (picks) => {
   picks.forEach((it) => {
     it.title = maybeTranslate_(it.title);
@@ -366,11 +345,10 @@ const enrichPicks_ = (picks) => {
 
 const sendDigestCard_ = (webhookUrl, picks) => {
   const dateStr = Utilities.formatDate(new Date(), "Asia/Seoul", "MM/dd");
-  const trackerBase = getTrackerBaseUrl_();
 
   const widgets = [];
 
-  // 맨 위 고정 링크 — 인라인 텍스트 링크로 4개를 한 줄에 (버튼은 폰트 크기 조절 불가)
+  // 맨 위 고정 링크
   const pinnedLinks = PINNED_LINKS.map((p) => `<a href="${p.url}">${p.name}</a>`).join("&nbsp;&nbsp;·&nbsp;&nbsp;");
   widgets.push({
     decoratedText: {
@@ -379,7 +357,6 @@ const sendDigestCard_ = (webhookUrl, picks) => {
     }
   });
 
-  // 이번 주 글
   widgets.push({ divider: {} });
   widgets.push({
     decoratedText: {
@@ -387,7 +364,7 @@ const sendDigestCard_ = (webhookUrl, picks) => {
       wrapText: true
     }
   });
-  picks.forEach((it) => makeItemWidgets_(it, dateStr, trackerBase).forEach((w) => widgets.push(w)));
+  picks.forEach((it) => makeItemWidgets_(it, dateStr).forEach((w) => widgets.push(w)));
 
   const payload = {
     cardsV2: [{
@@ -403,6 +380,7 @@ const sendDigestCard_ = (webhookUrl, picks) => {
       }
     }]
   };
+
   const res = UrlFetchApp.fetch(webhookUrl, {
     method: "post",
     contentType: "application/json",
@@ -415,10 +393,9 @@ const sendDigestCard_ = (webhookUrl, picks) => {
 };
 
 /** 한 아이템 → 카드 위젯 배열 (구분선 + 제목/미리보기 + 썸네일 + 버튼) */
-const makeItemWidgets_ = (it, dateStr, trackerBase) => {
+const makeItemWidgets_ = (it, dateStr) => {
   const pubStr = it.publishedAt ? Utilities.formatDate(it.publishedAt, "Asia/Seoul", "MM/dd") : "";
   const topLabel = it.sourceName + (pubStr ? ` · ${pubStr}` : "");
-  const linkUrl = buildTrackerUrl_(it, dateStr, trackerBase);
 
   let body = `<b>${escapeHtml_(it.title)}</b>`;
   if (it.summary) body += `<br/><font color="#5f6368">${escapeHtml_(it.summary)}</font>`;
@@ -427,20 +404,11 @@ const makeItemWidgets_ = (it, dateStr, trackerBase) => {
     { divider: {} },
     { decoratedText: { topLabel, text: body, wrapText: true } }
   ];
-  if (/^https:\/\//.test(it.image)) {   // 유효한 https 이미지만 (잘못된 URL은 카드 전체를 깨뜨림)
-    widgets.push({ image: { imageUrl: it.image, altText: it.title, onClick: { openLink: { url: linkUrl } } } });
+  if (/^https:\/\//.test(it.image)) {
+    widgets.push({ image: { imageUrl: it.image, altText: it.title, onClick: { openLink: { url: it.link } } } });
   }
-  widgets.push({ buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: linkUrl } } }] } });
+  widgets.push({ buttonList: { buttons: [{ text: "보러가기", onClick: { openLink: { url: it.link } } }] } });
   return widgets;
-};
-
-/** 트래커 설정 시 클릭 추적 URL, 아니면 원본 링크 */
-const buildTrackerUrl_ = (it, dateStr, trackerBase) => {
-  if (!trackerBase) return it.link;
-  const q = [
-    ["url", it.link], ["source", it.sourceName], ["title", it.title], ["sent", dateStr]
-  ].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-  return `${trackerBase}?${q}`;
 };
 
 // ==================== 디버그 / 유지보수 (진입점) ====================
@@ -510,18 +478,15 @@ const safeParseArray_ = (s) => {
   }
 };
 
-/** Medium 등의 ?source= 추적 파라미터 제거 (가독성·중복판정 개선) */
 const normalizeLink_ = (link) => {
   const l = String(link || "").trim();
   const idx = l.indexOf("?source=");
   return idx !== -1 ? l.slice(0, idx) : l;
 };
 
-/** rss.app Threads 피드 제목의 지저분한 꼬리표 정리 (`... • Threads, Say more` 등) */
 const cleanSource_ = (s) =>
   normalizeSpaces_(String(s || "").replace(/•\s*Threads.*$/i, "").replace(/\(@[\w.]+\)/, ""));
 
-/** EXTRA_FEEDS/FIREHOSE_FEEDS 문자열(줄바꿈/쉼표 구분)을 URL 배열로 파싱 */
 const parseExtraFeeds_ = (raw) =>
   String(raw || "").split(/[\n,]+/).map((s) => s.trim()).filter((s) => s.startsWith("http"));
 
@@ -536,14 +501,12 @@ const fetchFeedXml_ = (url) => {
   return xml.replace(/&(?!(amp|apos|quot|lt|gt|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
 };
 
-/** RSS/Atom 피드 파싱. { feedTitle, entries } 반환. */
 const parseFeed_ = (xml) => {
   const root = XmlService.parse(xml).getRootElement();
   const ns = root.getNamespace();
   const mediaNs = XmlService.getNamespace("http://search.yahoo.com/mrss/");
   const contentNs = XmlService.getNamespace("http://purl.org/rss/1.0/modules/content/");
 
-  // RSS (<channel><item>)
   const channel = root.getChild("channel");
   if (channel) {
     const entries = channel.getChildren("item").map((item) => ({
@@ -558,7 +521,6 @@ const parseFeed_ = (xml) => {
     return { feedTitle: normalizeSpaces_(stripHtml_(channel.getChildText("title") || "")), entries };
   }
 
-  // Atom (<feed><entry>)
   const entries = (root.getChildren("entry", ns) || []).map((entry) => {
     const author = entry.getChild("author", ns);
     return {
@@ -574,7 +536,6 @@ const parseFeed_ = (xml) => {
   return { feedTitle: normalizeSpaces_(stripHtml_(root.getChildText("title", ns) || "")), entries };
 };
 
-/** Atom <entry>에서 대표 링크(href) 추출 — rel=alternate 우선 */
 const atomLink_ = (entry, ns) => {
   const links = entry.getChildren("link", ns) || [];
   for (const l of links) {
@@ -586,7 +547,6 @@ const atomLink_ = (entry, ns) => {
   return first ? first.getValue().trim() : "";
 };
 
-/** 항목에서 이미지 URL 추출 (media:content / media:thumbnail / enclosure). 없으면 "" */
 const extractImage_ = (el, atomNs, mediaNs) => {
   try {
     for (const c of (el.getChildren("content", mediaNs) || [])) {
@@ -623,16 +583,14 @@ const extractImage_ = (el, atomNs, mediaNs) => {
 // ==================== 공통 유틸 ====================
 
 const getWebhookUrl_ = () => PropertiesService.getScriptProperties().getProperty("WEBHOOK_URL") || "";
-const getTrackerBaseUrl_ = () => PropertiesService.getScriptProperties().getProperty("TRACKER_BASE_URL") || "";
 
 const sendSimpleText_ = (url, text) => {
   UrlFetchApp.fetch(url, { method: "post", contentType: "application/json", payload: JSON.stringify({ text }) });
 };
 
-/** 영문이면 한국어로 번역, 이미 한국어면 그대로 (실패 시 원문 유지) */
 const maybeTranslate_ = (text) => {
   const t = String(text || "").trim();
-  if (!t || /[가-힣]/.test(t)) return t;        // 비었거나 이미 한국어
+  if (!t || /[가-힣]/.test(t)) return t;
   try {
     return LanguageApp.translate(t, "en", "ko");
   } catch (e) {
