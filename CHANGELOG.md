@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.1 (2026-06-08) — 클릭 추적 제거
+
+- `buildTrackerUrl_`, `getTrackerBaseUrl_` 함수 삭제
+- `makeItemWidgets_` 시그니처에서 `trackerBase` 파라미터 제거
+- `sendDigestCard_` 내 `trackerBase` 변수 제거
+- 버튼/이미지 onClick URL → `it.link` 직접 참조
+- Script Properties `TRACKER_BASE_URL` 키 삭제 권장
+
 ## v3.0 (2026-06-05) — 전면 재개편 · 리브랜딩 · 팀 스택 맞춤
 
 기존 다중 RSS + 방대한 차단 패턴 구조를 폐기하고, 국내 139개 기술블로그를 집계하는 **TechBlogPosts 통합 피드**를 메인으로 일원화했습니다. 이름도 `🍿 Popcorn Tech Digest` → **`🍿 IT TREND NEWS`**로 바꾸고, 대상 팀(HTML·CSS·SCSS·JS·jQuery 퍼블, 공공기관 유지보수)에 맞춰 선별 기준을 재설계했습니다. 코드도 모던 스타일로 리팩토링(973줄 → 약 590줄).
