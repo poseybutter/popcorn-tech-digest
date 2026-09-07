@@ -1,0 +1,21 @@
+{
+  "name": "popcorn-tech-digest",
+  "version": "5.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "try:curate": "node --env-file=.env scripts/try-curate.js",
+    "try:pipeline": "node --env-file=.env scripts/try-pipeline.js",
+    "try:db": "node --env-file=.env scripts/try-db.js",
+    "try:notify": "node --env-file=.env scripts/try-notify.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "rss-parser": "^3.13.0"
+  }
+}
