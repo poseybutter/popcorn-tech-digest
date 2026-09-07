@@ -2,23 +2,24 @@ name: Weekly Tech Digest
 
 on:
   schedule:
-    - cron: "0 9 * * 1"        # 매주 월요일 09:00 UTC
-  workflow_dispatch:             # 수동 실행
+    - cron: "0 0 * * 1"        # UTC 00:00 = KST 월요일 09:00
+  workflow_dispatch:            # 수동 실행
+
+permissions:
+  contents: read                # 최소 권한 (기본 읽기 전용)
 
 jobs:
   digest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - run: npm ci
       - run: node index.js
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
